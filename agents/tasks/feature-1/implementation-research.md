@@ -221,16 +221,150 @@ These are starting hypotheses, to be confirmed by the agent queries above.
 
 ### 4.4 Recorded findings
 
-Populate this subsection with the agent's actual output during the analysis run. Suggested format:
+Agent's actual output during the analysis run:
 
-```
-Q1 — Discussion model & associations
-Paths surfaced: <fill in from agent>
-Notes: <one line>
+1) **Discussion threads/replies in model layer**
 
-Q2 — Discussion controllers and resolvers
-…
+Canonical classes are:
+
+- `DiscussionTopic` = thread/topic root model, with `has_many :discussion_entries` and scoped root entries via `has_many :root_discussion_entries`.
+- `DiscussionEntry` = replies/posts, with `belongs_to :discussion_topic` plus self-referential threading (`parent_entry`, `root_entry`, `discussion_subentries`).
+
+```91:124:app/models/discussion_topic.rb
+has_many :discussion_entries, -> { order(:created_at) }, dependent: :destroy, inverse_of: :discussion_topic
+has_many :root_discussion_entries, -> { preload(:user).where("discussion_entries.parent_id IS NULL AND discussion_entries.workflow_state<>'deleted'") }, class_name: "DiscussionEntry"
+...
+has_many :summaries, class_name: "DiscussionTopicSummary"
+has_many :insights, class_name: "DiscussionTopicInsight"
 ```
+
+```37:52:app/models/discussion_entry.rb
+has_many :discussion_subentries, -> { order(:created_at) }, class_name: "DiscussionEntry", foreign_key: "parent_id", inverse_of: :parent_entry
+...
+belongs_to :discussion_topic, inverse_of: :discussion_entries
+belongs_to :parent_entry, class_name: "DiscussionEntry", foreign_key: :parent_id, inverse_of: :discussion_subentries
+belongs_to :root_entry, class_name: "DiscussionEntry"
+```
+
+---
+
+2) **Controllers + GraphQL resolvers serving discussion thread data today**
+
+**Rails controllers (REST/HTML):**
+- `DiscussionTopicsController` (`index`, `show`) serves page + JSON topic payload and mounts the `discussion_topics_post` bundle.
+- `DiscussionTopicsApiController` serves API thread/topic data (`show`, `view`, `entries`, `replies`, `entry_list`, plus summary/insight endpoints).
+- `DiscussionEntriesController` serves entry CRUD (legacy/non-GraphQL path).
+
+**GraphQL surfaces:**
+- Node loading: `GraphQLNodeLoader` resolves `"Discussion"` via `DiscussionTopic` with `:read` check.
+- Query connection: `Interfaces::DiscussionsConnectionInterface` (used by `CourseType`) returns `discussions_connection`.
+- Thread fields: `Types::DiscussionType` (`discussion_entries_connection`, `entry_counts`, etc.) and `Types::DiscussionEntryType`.
+- Mutations in `Types::MutationType`: `create_discussion_entry`, `update_discussion_entry`, `update_discussion_entries_read_state`, `update_discussion_topic`, etc.
+
+---
+
+3) **Permission method for read + moderation**
+
+From `DiscussionTopic` policy:
+
+- **Read gate**: effectively `visible_for?(user)` (grants `:read`) and context permission `:read_forum`/`:read_announcements` inside `visible_for?`.
+- **Moderation gate**: `context.grants_all_rights?(user, session, :moderate_forum, :read_forum)` (and related checks), plus explicit `can :moderate_forum`.
+
+```1445:1502:app/models/discussion_topic.rb
+given { |user| visible_for?(user) }
+can :read
+...
+given { |user, session| context.grants_all_rights?(user, session, :moderate_forum, :read_forum) }
+can :moderate_forum
+```
+
+---
+
+4) **How feature flags are declared/referenced (account/course inheritance pattern)**
+
+Pattern in this repo:
+
+- Declare in YAML under `config/feature_flags/*.yml` with `applies_to` and `root_opt_in`.
+- For course-level features requiring root-account opt-in: use `applies_to: Course` + `root_opt_in: true`.
+- Optional companion root-account/shadow flag can control backend provider behavior.
+
+Concrete precedent for discussions:
+
+```2:13:config/feature_flags/discussion_summary.yml
+discussion_summary:
+  state: allowed
+  root_opt_in: true
+  applies_to: Course
+...
+discussion_summary_with_cedar:
+  state: hidden
+  applies_to: RootAccount
+  shadow: true
+```
+
+References are then via `course.feature_enabled?(:discussion_summary)` and `Account.site_admin.feature_enabled?(:discussion_insights_with_cedar)` in model/controller code.
+
+---
+
+5) **Async course-scoped background-job pattern to mirror**
+
+This codebase mostly uses **Delayed Job via model methods** (`delay` / `delay_if_production`) rather than `app/jobs` ActiveJob classes.
+
+Strong discussion precedent:
+- `DiscussionTopicsApiController#insight_generation` enqueues `insight.generate` with `priority`, `singleton`, and `n_strand` (regional/course-safe throttling).
+- `DiscussionTopic::MaterializedView` uses `handle_asynchronously` and singleton dedupe.
+
+```372:377:app/controllers/discussion_topics_api_controller.rb
+insight.delay(
+  priority: Delayed::HIGH_PRIORITY,
+  singleton: "discussion_topic:insight_generation_for_topic:#{@topic.id}",
+  n_strand: ["discussion_topic:insight_generation:#{Shard.current.database_server.region}", 1]
+).generate
+```
+
+Recommendation based on local conventions: use `delay_if_production`/`delay` with `singleton` + `n_strand` keys for course-scoped summarization work.
+
+---
+
+6) **Where new discussion experience is rendered + best insertion point above first reply**
+
+Render path:
+
+- Controller: `DiscussionTopicsController#show` sets `js_bundle :discussion_topics_post`.
+- Frontend entrypoint: `ui/features/discussion_topics_post/index.tsx` mounts `DiscussionTopicsPost` into `#discussion-redesign-layout`.
+- Orchestration: `DiscussionTopicManager` renders `DiscussionTopicContainer`, then `DiscussionTopicRepliesContainer`.
+
+Best additive insertion point “above first reply”:
+- `DiscussionTopicRepliesContainer` wraps root replies in `discussion-root-entry-container` and maps each thread; adding a block before the map places content directly above first root reply.
+- Alternative (higher-level): insert between `DiscussionTopicContainer` and `DiscussionTopicRepliesContainer` in `DiscussionTopicManager` if you want it between topic body and replies list.
+
+---
+
+7) **Existing cache/version-keyed derived-content patterns**
+
+Two strong existing patterns:
+
+- **Hash-keyed derived AI content**:
+  - `DiscussionTopicSummary` requires `dynamic_content_hash` + `llm_config_version`.
+  - `fetch_or_create_summary` dedupes by `(llm_config_version, dynamic_content_hash, parent)`.
+  - Insights entries similarly hash content via `DiscussionTopicInsight::Entry.hash_for_dynamic_content`.
+
+- **Record-version freshness check**:
+  - `DiscussionTopic::MaterializedView#up_to_date?` checks `updated_at >= discussion_topic.updated_at` before serving cached structure.
+
+So the repo already uses both “content hash key” and “source record timestamp/version” strategies.
+
+---
+
+8) **Audit-style logging precedent for outbound third-party calls**
+
+For LLM/external calls, precedents are mixed but clear:
+
+- **Persisted audit record approach**: `RubricLLMService` writes `LLMResponse` rows containing prompt config/model, dynamic content, raw response, tokens, response time, and root account.
+- **Operational observability approach**: discussion summary/insight paths emit `InstStatsd` metrics, `Rails.logger.error`, and `Canvas::Errors.capture_exception(...)` for failures.
+- **Structured audit infra precedent** (not LLM-specific): GraphQL mutations use `AuditLogFieldExtension` to write detailed mutation logs to DynamoDB.
+
+If your goal is LLM-call auditability, the closest direct precedent is the `LLMResponse` persistence pattern in `RubricLLMService`; for reliability monitoring, mirror the `Statsd + Canvas::Errors` pattern already used in discussion summary/insights.
 
 ### 4.5 Open questions
 
