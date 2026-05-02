@@ -25,7 +25,7 @@ A new feature flag is exposed in the existing account/course feature settings UI
 
 The most important boundary is the call from the application to the summarization model. The exact data sent depends on the configured scope mode:
 
-- **Default scope.** The thread's reply text is sent to the model, with author display names replaced by stable per-thread pseudonyms (Author A, Author B…) before the request leaves the application boundary. This avoids passing names to a third-party model.
+- **Default scope.** The thread's reply text is sent to the model, with author display names replaced by stable per-thread pseudonyms (Author A, Author B…) before the request leaves the application boundary. This avoids passing names to a third-party model. Pseudonymization is an outbound-only transform: the rendered summary uses real author names, since the viewer already has read access to the thread and attribution does not leak anything new.
 - **Scope-limited mode.** Only instructor posts and the viewer's own posts are sent. The summary is annotated to reflect the limited scope.
 - **Self-hosted mode.** Same payload as default scope but routed to an institution-hosted endpoint; no third-party transit.
 
@@ -42,7 +42,7 @@ A second boundary is the cache: summary text is stored against a thread "content
 
 ### 1.4 Interaction with existing platform concepts
 
-- **Roles and permissions.** The summary block is governed by the same read permission as the thread itself (a user who cannot see the thread cannot see its summary). The instructor digest is gated by an existing forum-moderation permission. No new permission objects are introduced for this first version (v1).
+- **Roles and permissions.** The summary block is governed by the same read permission as the thread itself (a user who cannot see the thread cannot see its summary), and inherits any per-thread visibility gate the thread itself enforces — including the "users must post before seeing replies" setting. If a viewer cannot yet see the replies, they cannot see the summary either. The instructor digest is gated by an existing forum-moderation permission. No new permission objects are introduced for this first version (v1).
 - **Course and account hierarchy.** The feature flag follows the existing inherit-and-override pattern: account default → course override.
 - **Discussion variants.** Anonymous discussions, group discussions, and locked discussions all need explicit handling. v1 supports standard threaded discussions and explicitly excludes anonymous discussions (out of scope) to avoid unmasking through summarization.
 - **API surface.** Existing discussion REST and GraphQL responses are not changed in shape; the summary is exposed via additive fields and a new endpoint, never as a replacement.
@@ -56,6 +56,7 @@ A second boundary is the cache: summary text is stored against a thread "content
 | Privacy concerns block institutional adoption | Medium | High | Scope-limited mode, self-hosted mode, account-level toggle, audit log |
 | Summarization service outage | Low | Low | Thread renders without summary; "summary unavailable" non-blocking state |
 | Anonymous discussion unmasking | Low | High | Explicitly out of scope for v1; suppressed at the resolver layer |
+| Summary leaks replies on "must post first" threads | Medium | High | Summary visibility inherits the thread's "users must post before seeing replies" gate (FR-9); no generation initiated for viewers who have not yet posted |
 
 ---
 
@@ -118,6 +119,13 @@ The system shall render the discussion thread normally and shall display an unob
 - **Given** a summarization service that returns errors or times out
 - **When** a user opens a thread
 - **Then** the thread renders within its normal latency budget, the summary block displays an unavailable state, and the failure is recorded in the application's metrics without surfacing as a user-facing error toast
+
+### FR-9 — Honor the "users must post before seeing replies" gate
+The system shall not render or generate a summary for a viewer who has not satisfied the thread's "users must post before seeing replies" requirement.
+
+- **Given** a discussion thread with the "users must post before seeing replies" setting enabled, and a viewer who has not yet posted a substantive reply
+- **When** the viewer opens the thread
+- **Then** the system does not display a summary block, does not initiate a generation request on behalf of that viewer, and falls back to the thread's existing prompt-to-post experience
 
 ### Scope boundaries
 
@@ -427,6 +435,7 @@ Acceptance ties back to the functional requirements one for one:
 | FR-6 | Reporting flow records reason category and reporter role against the summary version |
 | FR-7 | Regenerate inside the cool-down returns the cached summary; budget exhaustion is observable |
 | FR-8 | Forced summarization-service failure leaves the thread fully usable and is captured in metrics |
+| FR-9 | A viewer who has not yet posted in a "must post first" thread sees no summary block and triggers no generation; once they post and reload, the summary appears |
 
 ### 5.5 Areas where automated coverage is impractical
 
@@ -472,7 +481,7 @@ For each milestone above, the planning agent should generate stories that cover,
 - The observability work (metric, log, or dashboard line) that lets owners know the new code is healthy.
 - The documentation or release-note line that closes the loop.
 
-Stories should reference the corresponding functional requirement (FR-1 through FR-8) so traceability holds end to end.
+Stories should reference the corresponding functional requirement (FR-1 through FR-9) so traceability holds end to end.
 
 ### 6.4 Definition of done (applied to every story)
 
@@ -488,7 +497,7 @@ Stories should reference the corresponding functional requirement (FR-1 through 
 
 After populating the project board, the planning agent must confirm:
 
-- Every functional requirement (FR-1 through FR-8) is covered by at least one acceptance-bearing story.
+- Every functional requirement (FR-1 through FR-9) is covered by at least one acceptance-bearing story.
 - Every milestone has at least one observability story and at least one testing story.
 - Dependencies between stories are recorded as project relationships, not only as prose.
 - The scope boundary table is reflected as explicit "out of scope" notes on the relevant stories rather than absent from the plan.
