@@ -92,7 +92,7 @@ Server: nginx + Phusion Passenger(R)
 
 ```
 
-Browser verification: Canvas login screen reachable at `http://<elastic-ip>:3000/`. Screenshot submitted with this lab.
+Browser verification: Canvas login screen reachable at `http://3.233.56.59:3000/`. Screenshot submitted with this lab.
 
 ## Out of scope
 
