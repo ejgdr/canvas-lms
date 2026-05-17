@@ -1,0 +1,19 @@
+---
+discussion_thread_summarizer:
+  state: allowed
+  root_opt_in: true
+  applies_to: Course
+  display_name: Discussion Thread Summarizer
+  description: >-
+    Summarize discussion threads using AI, surfacing main themes,
+    dominant viewpoints, and open questions. Disabled by default;
+    account admins must enable before courses can opt in.
+
+discussion_thread_summarizer_with_cedar:
+  state: hidden
+  applies_to: RootAccount
+  shadow: true
+  display_name: Discussion Thread Summarizer with Cedar
+  description: >-
+    Routes Discussion Thread Summarizer requests through Cedar
+    instead of direct model calls.
