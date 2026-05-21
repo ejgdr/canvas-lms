@@ -32,7 +32,7 @@
 - A one-line summary.
 - A `Closes #<issue-number>` line so the linked issue auto-closes on merge.
 - Source-of-truth references: FR-N from the research package, M<n> milestone.
-- A "Verification" subsection listing what was checked (syntax, lint, manual review, tests where applicable).
+- A "Verification" subsection listing what was checked, including the QA test command and outcome (or the justified-skip rationale), traceable to the matching entry in `agents/tasks/feature-1/qa-lab-evidence.md`.
 - A "Scope" subsection naming what is intentionally not in this PR.
 
 ## MCP usage
@@ -53,7 +53,7 @@ The agent uses the same GitHub MCP server connected in earlier project-creation 
 ## Procedure
 
 1. **Re-ground.** Output `git rev-parse HEAD` for the working clone. If this agent file or any input file carries a `Last verified` stamp older than HEAD, refresh the stamp on this file before proceeding. See `agents/memory-practice.md`.
-2. **Select the slice.** Via MCP, list open project items in the current iteration (first cycle: Iteration 1, mapped to M1 — Foundations). Among items in Status `Backlog` or `Ready`, pick the one with no remaining `Blocked by` dependencies and well-defined acceptance criteria. Record the issue number and the title verbatim. Do not invent a slice not on the board.
+2. **Select the slice.** Via MCP, list open project items in the current iteration (first cycle: Iteration 1, mapped to M1 — Foundations). Among items in Status `Todo` or `Ready`, pick the one with no remaining `Blocked by` dependencies and well-defined acceptance criteria. Record the issue number and the title verbatim. Do not invent a slice not on the board.
 3. **Confirm in-scope.** Read the chosen issue body. Confirm the linked FR appears in `implementation-research.md` §2 and that the §4.4 codebase evidence is concrete enough to act on. If either check fails, stop and surface the gap.
 4. **Move to In Progress.** Via MCP, update the project item's Status field to `In Progress`. Capture the previous status and the transition timestamp for the evidence log.
 5. **Branch.** From an up-to-date `master`, create a branch following the naming convention:
@@ -62,7 +62,7 @@ The agent uses the same GitHub MCP server connected in earlier project-creation 
    git checkout -b <type>/m<n>-<slug>
    ```
 6. **Implement.** Apply the smallest change that satisfies the issue's acceptance criteria. For YAML or config-only changes, follow the precedent file cited in §4.4. For code changes, write the change and any required tests in the same PR. Keep the diff reviewable — if the change grows past roughly 200 lines of meaningful change, stop and propose splitting the slice into multiple board items rather than continuing.
-7. **Local verification.** Run the checks called for by the slice's definition of done. For YAML changes: validate syntax (e.g. `ruby -ryaml -e "YAML.load_file('path/to/file')"`). For code changes: run the affected unit and/or integration tests. Capture the exact command and output for the evidence log.
+7. **QA handoff.** Hand control to the QA agent per `agents/quality-assurance.md`. The QA agent classifies the slice, proposes the smallest credible automated test (or a justified skip), runs the agreed command, updates the `QA Status` field on the project board, and appends an entry to `agents/tasks/feature-1/qa-lab-evidence.md`. Do not proceed to step 8 unless `QA Status` returns `Pass` or `Skip — justified`. The command and outcome captured by the QA agent become the local-verification record cited in this slice's `implementation-evidence.md` entry.
 8. **Commit and push.**
    ```
    git add <paths>
@@ -83,8 +83,8 @@ A slice is not "complete" until all of the following are true:
 - The project item Status is `Done`.
 - The slice's acceptance criteria (as quoted from the issue body) are satisfied by the merged change, or explicitly deferred to a follow-up issue which is itself created and linked.
 - The change is gated behind the appropriate feature flag at the resolved scope, per the research package's definition of done.
-- Where applicable, tests have been added or updated and pass locally.
-- The `implementation-evidence.md` entry is written in the same session.
+- The `QA Status` field on the project board is `Pass` or `Skip — justified`, with a matching entry in `agents/tasks/feature-1/qa-lab-evidence.md`. The QA agent (`agents/quality-assurance.md`) owns this gate; merge is blocked while `QA Status` is `Pending` or `Fail`.
+- The `implementation-evidence.md` entry is written in the same session and cross-references the matching `qa-lab-evidence.md` entry.
 
 ## Guardrails
 
@@ -109,4 +109,4 @@ Each successful slice appends an entry to `agents/tasks/feature-1/implementation
 For future slices that touch areas not yet analyzed, run the repository analysis agent (`agents/analyze-repo.md`) and update `implementation-research.md` §4.4 with the new findings before starting the slice. The implementation agent and the analysis agent share the same memory discipline: every artifact carries a `Last verified` stamp against a specific commit.
 
 ---
-*Last verified: 2026-05-13 against commit 5b8b921cf5dbbff3e4c75539522b66fcdacbee05*
+*Last verified: 2026-05-18 against commit aa7e73ee50e8d7b612f3b5611c9607934dbc7789*
