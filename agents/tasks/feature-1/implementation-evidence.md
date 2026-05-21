@@ -27,4 +27,33 @@ This file records completed slice cycles for the Discussion Thread Summarizer fe
 **Trace to plan.** This slice executes the first M1 — Foundations item in `agents/tasks/feature-1/implementation-research.md` §6.1 and the corresponding root story on the project board at https://github.com/users/ejgdr/projects/1. The §4.4 codebase finding — the `discussion_summary.yml` precedent — defined the file path and shape; the only deviations from the precedent are the flag names themselves, deliberately distinct to avoid collision with the upstream `discussion_summary` feature. With the flag now on `master`, every downstream slice (summarization service, cache layer, per-thread UI surface, instructor digest, privacy controls) can reference `course.feature_enabled?(:discussion_thread_summarizer)` and the dependency chain in §6.2 of the research package is unblocked.
 
 ---
-*Last verified: 2026-05-17 against commit aa7e73ee50e8d7b612f3b5611c9607934dbc7789*
+
+## Cycle 2 — Toggle UI plumbing (M1 Foundations)
+
+**Slice.** Wire the `discussion_thread_summarizer` feature flag into the account and course feature settings UI by (a) adding `environments` overrides for development and CI to the YAML so developers can exercise the feature without a manual admin toggle, and (b) adding `discussion_thread_summarizer_enabled` to the js_env hash in `DiscussionTopicsController#show` so the resolved flag state is visible to the frontend. No summary block or digest tab is rendered — those are M4 and M5 work.
+
+**Issue.** [#2](https://github.com/ejgdr/canvas-lms/issues/2) — "[M1] Account- and course-level feature toggle UI plumbing." Linked to FR-4 in `agents/tasks/feature-1/implementation-research.md` (the system must not generate, render, or call out to the summarization model when the feature is disabled for the account or course). Dependency on #1 was resolved by Cycle 1.
+
+**Pull request.** [#56](https://github.com/ejgdr/canvas-lms/pull/56) — `feat(feature-flags): wire toggle UI plumbing for discussion_thread_summarizer`. Three files changed, 26 insertions:
+
+- `config/feature_flags/discussion_thread_summarizer.yml` — 5 lines: `environments` block (`development: state: allowed_on`, `ci: state: allowed_on`).
+- `app/controllers/discussion_topics_controller.rb` — 1 line: `discussion_thread_summarizer_enabled: @context.is_a?(Course) && @context.feature_enabled?(:discussion_thread_summarizer)` in the `show` js_env hash, following the `discussion_pin_post` precedent adjacent to it.
+- `spec/controllers/discussion_topics_controller_spec.rb` — 20 lines: two examples in `describe "GET 'show'"` verifying the on/off ENV values.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-21T22:30:32Z | Todo → In Progress | MCP update on project item id `183104517` |
+| 2026-05-21T22:31:07Z | QA Status set to Pending | MCP update on project item id `183104517` |
+| 2026-05-21T22:48:20Z | QA Status → Pass | MCP update on project item id `183104517` |
+| 2026-05-21T22:49:55Z | In Progress → Done | MCP update on project item id `183104517` |
+
+**Merge evidence.** PR #56 was squash-merged into `master` at commit `efd2722a9b689ca3bf12ca0d91534c0f77fbabd9`. Issue #2 was auto-closed by the `Closes #2` line in the PR body.
+
+**Local verification.** Two RSpec examples in `spec/controllers/discussion_topics_controller_spec.rb` run via `bundle exec rspec spec/controllers/discussion_topics_controller_spec.rb --example "discussion_thread_summarizer_enabled" --format documentation`. Exit code 0, 2 examples, 0 failures (6.58 seconds). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 2.
+
+**Trace to plan.** This slice executes the second M1 — Foundations story in `agents/tasks/feature-1/implementation-research.md` §6.1. The §4.4 codebase finding — the controller ENV pattern for `discussion_pin_post` and the `environments` pattern from `outcomes_feature_flags.yml` — defined both change sites. The `@context.is_a?(Course)` guard is a direct expression of the flag's `applies_to: Course` scope; group discussions, where `@context` is a Group, are explicitly outside feature scope per §2 scope boundaries and return `false` without reaching `feature_enabled?`. With `discussion_thread_summarizer_enabled` now on `master`, every M4 and M5 component can gate its rendering on `ENV.discussion_thread_summarizer_enabled` and the dependency chain in §6.2 is further unblocked.
+
+---
+*Last verified: 2026-05-21 against commit efd2722a9b689ca3bf12ca0d91534c0f77fbabd9*
