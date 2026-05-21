@@ -907,6 +907,7 @@ class DiscussionTopicsController < ApplicationController
              user_can_access_insights: @topic.user_can_access_insights?(@current_user),
              discussion_pin_post: @context.feature_enabled?(:discussion_pin_post),
              discussion_summary_enabled: participant.nil? ? @topic.summary_enabled : participant.summary_enabled,
+             discussion_thread_summarizer_enabled: @context.is_a?(Course) && @context.feature_enabled?(:discussion_thread_summarizer),
              should_show_deeply_nested_alert: @current_user&.should_show_deeply_nested_alert?,
              # although there is a permissions object in DiscussionEntry type, it's only accessible if a discussion entry
              # is being replied to. We need this env var so that replying to the topic can use this

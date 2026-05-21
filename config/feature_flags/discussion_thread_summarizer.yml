@@ -8,6 +8,11 @@ discussion_thread_summarizer:
     Summarize discussion threads using AI, surfacing main themes,
     dominant viewpoints, and open questions. Disabled by default;
     account admins must enable before courses can opt in.
+  environments:
+    development:
+      state: allowed_on
+    ci:
+      state: allowed_on
 
 discussion_thread_summarizer_with_cedar:
   state: hidden

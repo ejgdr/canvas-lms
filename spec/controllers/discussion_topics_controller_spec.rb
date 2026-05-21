@@ -710,6 +710,26 @@ describe DiscussionTopicsController do
       expect(response.location).to eq course_discussion_topics_url @course
     end
 
+    context "discussion_thread_summarizer_enabled js_env" do
+      let(:topic) do
+        @course.discussion_topics.create!(user: @teacher, title: "Test topic", message: "Hello")
+      end
+
+      it "is true when the feature is enabled for the course" do
+        @course.enable_feature!(:discussion_thread_summarizer)
+        user_session(@teacher)
+        get "show", params: { course_id: @course.id, id: topic.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(true)
+      end
+
+      it "is false when the feature is disabled for the course" do
+        @course.disable_feature!(:discussion_thread_summarizer)
+        user_session(@teacher)
+        get "show", params: { course_id: @course.id, id: topic.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(false)
+      end
+    end
+
     context "js_env DISCUSSION_TOPIC PERMISSIONS CAN_SET_GROUP" do
       it "CAN_SET_GROUP is true when user is a teacher" do
         user_session(@teacher)
