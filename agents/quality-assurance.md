@@ -4,7 +4,7 @@
 
 **Role.** Decide whether a slice needs an automated test, propose the smallest credible test for it, run the agreed test command, and record the outcome both on the project board and in the evidence log. Inputs are the slice's diff, the active issue, and the test-command catalog. The QA agent owns the test decision and the pass/skip record. The implementation agent in `agents/feature-implementation.md` retains ownership of scope selection, branching, commits, push, PR opening, merge, and the `Status` field transitions.
 
-**Non-goals.** Does not write production application code. Does not transition the issue's `Status` field (`Todo`/`In Progress`/`Done`) — that remains the implementation agent's responsibility. Does not modify the GitHub Project layout beyond the single `QA Status` field defined below. Does not retry failed tests until they happen to go green; an honest red result is preferable to a silent loop.
+**Non-goals.** Does not write production application code. Does not transition the issue's `Status` field (`Backlog`/`Ready`/`In Progress`/`Done`) — that remains the implementation agent's responsibility. Does not modify the GitHub Project layout beyond the single `QA Status` field defined below. Does not retry failed tests until they happen to go green; an honest red result is preferable to a silent loop.
 
 ## Inputs (source of truth)
 
@@ -21,13 +21,17 @@
 
 ## Test commands for this stack
 
+This fork runs Canvas via Docker Compose. Ruby, Bundler, Node, and Yarn all live inside the `web` container — not on the development host's shell. Every test command is therefore prefixed with `docker compose exec web`. Before invoking any of them, confirm the stack is up with `docker compose ps`; if the `web` service is not `Up`, run `docker compose up -d` from the repo root and allow roughly 30 seconds for postgres and redis to become healthy.
+
 | Change shape | Command |
 |---|---|
-| Ruby / Rails unit or integration | `bundle exec rspec <spec_path>` |
-| JavaScript / React (Jest) | `yarn jest <ui_path>` |
-| YAML or other config syntax | `ruby -ryaml -e "YAML.load_file('<path>')"` (Python fallback when Ruby is not on the host: `python -c "import yaml; yaml.safe_load(open('<path>'))"`) |
-| Smoke / style gate (Ruby) | `bundle exec rubocop <path>` |
-| Smoke / style gate (JS) | `yarn lint:js` |
+| Ruby / Rails unit or integration | `docker compose exec web bundle exec rspec <spec_path>` |
+| JavaScript / React (Jest) | `docker compose exec web yarn jest <ui_path>` |
+| YAML or other config syntax | `docker compose exec web ruby -ryaml -e "YAML.load_file('<path>')"` |
+| Smoke / style gate (Ruby) | `docker compose exec web bundle exec rubocop <path>` |
+| Smoke / style gate (JS) | `docker compose exec web yarn lint:js` |
+
+If the working clone is being inspected from a context without the Docker stack available (for example, an early draft session on a host without Canvas installed), the YAML parse may fall back to `python -c "import yaml; yaml.safe_load(open('<path>'))"` on the host. This is the substitute Cycle 1 used and it is acceptable only for the config-only-with-parse-substitute case; behavior-changing code always requires the container running so that RSpec or Jest can actually exercise the slice.
 
 Pick the smallest credible level for the slice: unit before integration, integration before end-to-end. Capture the exact command, the exit code, and a clipped tail of stdout (typically the test runner's summary line) for the evidence file.
 
@@ -101,4 +105,4 @@ Behavior-changing code never qualifies for skip. If the change is hard to test, 
 Each completed QA cycle appends an entry to `agents/tasks/feature-1/qa-lab-evidence.md`. The implementation agent reads that entry to confirm `QA Status` before proceeding to commit, push, and merge. The evidence file is the rubric-graded artifact alongside this spec, and the two are designed to be read as a pair with `agents/feature-implementation.md` and `agents/tasks/feature-1/implementation-evidence.md`.
 
 ---
-*Last verified: 2026-05-18 against commit aa7e73ee50e8d7b612f3b5611c9607934dbc7789*
+*Last verified: 2026-05-22 against commit bb6379a7e3ed75ebae885a2ac016e560c471b6cb*
