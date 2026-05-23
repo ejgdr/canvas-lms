@@ -56,4 +56,32 @@ This file records completed slice cycles for the Discussion Thread Summarizer fe
 **Trace to plan.** This slice executes the second M1 — Foundations story in `agents/tasks/feature-1/implementation-research.md` §6.1. The §4.4 codebase finding — the controller ENV pattern for `discussion_pin_post` and the `environments` pattern from `outcomes_feature_flags.yml` — defined both change sites. The `@context.is_a?(Course)` guard is a direct expression of the flag's `applies_to: Course` scope; group discussions, where `@context` is a Group, are explicitly outside feature scope per §2 scope boundaries and return `false` without reaching `feature_enabled?`. With `discussion_thread_summarizer_enabled` now on `master`, every M4 and M5 component can gate its rendering on `ENV.discussion_thread_summarizer_enabled` and the dependency chain in §6.2 is further unblocked.
 
 ---
-*Last verified: 2026-05-21 against commit efd2722a9b689ca3bf12ca0d91534c0f77fbabd9*
+
+## Cycle 3 — Permission audit (M1 Foundations)
+
+**Slice.** Audit `DiscussionTopic`'s existing permission gates and document that the Discussion Thread Summarizer requires no new permission objects. Two targeted comment insertions confirm the design decision in the model file; a new `doc/` Markdown file serves as the formal audit record and release note (NFR-6).
+
+**Issue.** [#3](https://github.com/ejgdr/canvas-lms/issues/3) — "[M1] Permission audit: confirm reuse of read and moderate_forum gates." Linked to FR-4, FR-9, and NFR-6 in `agents/tasks/feature-1/implementation-research.md`. No `Blocked by` dependencies.
+
+**Pull request.** [#58](https://github.com/ejgdr/canvas-lms/pull/58) — `docs(permissions): audit summarizer gate reuse`. Two files changed, 53 insertions, 0 deletions:
+
+- `app/models/discussion_topic.rb` — 4-line block comment before `set_policy do` pointing to the audit doc; 1-line FR-9 comment above `user_can_see_posts?`. No executable tokens added or removed; `set_policy` block untouched.
+- `doc/discussion_thread_summarizer_permissions.md` — new 48-line Markdown file documenting the two reused gates (`:read` via `visible_for?` and `:moderate_forum`), mapping each to the acceptance criteria, and providing the release note text.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-23T01:04:03Z | Todo → In Progress | MCP update on project item id `183104501` |
+| 2026-05-23T01:05:00Z | QA Status set to Pending | MCP update on project item id `183104501` |
+| 2026-05-23T01:07:17Z | QA Status → Skip — justified | MCP update on project item id `183104501` |
+| 2026-05-23T01:08:01Z | In Progress → Done | MCP update on project item id `183104501` |
+
+**Merge evidence.** PR #58 was squash-merged into `master` at commit `dd69253adf5b7229af46068a3db1572a6433fb0e`. Issue #3 was auto-closed by the `Closes #3` line in the PR body.
+
+**Local verification.** Diff is docs-only (Ruby comments and Markdown). QA classification: `Skip — justified`. No test command executed; rationale recorded in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 3.
+
+**Trace to plan.** This slice executes the third M1 — Foundations story in `agents/tasks/feature-1/implementation-research.md` §6.1. The §4.4 codebase evidence — `discussion_topic.rb` lines 1445–1502 for `:read` via `visible_for?` and line 1500 for `:moderate_forum` — confirmed that no new `given`/`can` blocks or `RoleOverride` entries are needed. All four acceptance criteria are satisfied by confirming existing gates are present (documented), not by adding new runtime code. With the audit on `master`, M4 (#24, #26) and M5 (#29, #31) implementers have a written reference they can cite when implementing the actual summary and digest endpoints.
+
+---
+*Last verified: 2026-05-23 against commit dd69253adf5b7229af46068a3db1572a6433fb0e*
