@@ -49,4 +49,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-21 against commit bb6379a7e3ed75ebae885a2ac016e560c471b6cb*
+## Cycle 3 — Permission audit (issue #3, M1 Foundations)
+
+| Field | Content |
+|---|---|
+| Slice | [#3](https://github.com/ejgdr/canvas-lms/issues/3) — "[M1] Permission audit: confirm reuse of read and moderate_forum gates." Branch `docs/m1-permission-audit`. |
+| Classification | Docs-only (two Ruby `#` comment insertions in `discussion_topic.rb`; one new Markdown file in `doc/`). No executable token added, removed, or changed; `set_policy` block untouched. |
+| Tests added or updated | None — see rationale |
+| Command | N/A |
+| Outcome | N/A |
+| `QA Status` | `Skip — justified` (docs-only: pure comments in a model file and a new Markdown audit record; no behavior-changing application code in diff) |
+| PR / commit | [PR #58](https://github.com/ejgdr/canvas-lms/pull/58) |
+| Trace to plan | FR-4, FR-9, NFR-6 — all acceptance criteria are satisfied by confirming existing gates are present (documented), not by adding new runtime code. No new `given`/`can` blocks or `RoleOverride` entries appear anywhere in the diff. |
+
+---
+
+*Last verified: 2026-05-23 against commit 69d86f45561*
