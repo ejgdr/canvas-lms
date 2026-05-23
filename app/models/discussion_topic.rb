@@ -1336,6 +1336,7 @@ class DiscussionTopic < ApplicationRecord
     ids
   end
 
+  # FR-9: discussion thread summarizer reuses this gate; summary is suppressed for users who have not yet posted in the thread.
   def user_can_see_posts?(user, session = nil, associated_user_ids = [])
     return false unless user
 
@@ -1442,6 +1443,10 @@ class DiscussionTopic < ApplicationRecord
     end
   end
 
+  # Discussion Thread Summarizer permission reuse (FR-4, FR-9, NFR-6).
+  # Summary read access inherits :read via visible_for?; the digest tab gates
+  # on :moderate_forum. No new permission objects or RoleOverride entries.
+  # See doc/discussion_thread_summarizer_permissions.md for the full audit.
   set_policy do
     # Users may have can :read, but should not have access to all the data
     # because the topic is locked_for?(user)
