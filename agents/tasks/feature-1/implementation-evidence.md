@@ -119,4 +119,36 @@ A `# TODO (M2/M3)` comment at the top of the context block marks where a no-job-
 **Trace to plan.** This slice executes the M1 — Foundations testing story for FR-4 in `agents/tasks/feature-1/implementation-research.md` §5.2 and §6.1. The §4.4 codebase finding Q4 confirmed the `discussion_thread_summarizer` flag follows the `root_opt_in: true`, `applies_to: Course` pattern. The tests now establish a living regression guard for the inheritance chain: any future change to the flag YAML or the `feature_enabled?` resolution path that breaks account→course inheritance will surface immediately on these four examples. The deferred TODO comment connects this slice forward to M2/M3, where the no-job-enqueued assertion for criterion 5 will be added once summarization job code exists.
 
 ---
-*Last verified: 2026-05-25 against commit 7d33f1254b216c3e49478530ae0a287cfd213664*
+
+## Cycle 5 — Observability scaffolding: InstStatsd metric helpers (M1 Foundations)
+
+**Slice.** Create `lib/discussion_thread_summarizer/metrics.rb` with six thin module-level helpers wrapping InstStatsd, and `spec/lib/discussion_thread_summarizer/metrics_spec.rb` with one example per helper. No caller is wired; M2+ service code will `require` this module without modifying it. This is the M1 observability story: NFR-4 requires generation latency (p50/p95/p99), cache hit rate, error rate by failure mode, daily generation count by account, and report submission count by reason category.
+
+**Issue.** [#4](https://github.com/ejgdr/canvas-lms/issues/4) — "[M1] Observability scaffolding: InstStatsd counters for discussion thread summarizer." Linked to NFR-4 in `agents/tasks/feature-1/implementation-research.md`. No `Blocked by` dependencies on this item.
+
+**Pull request.** [#60](https://github.com/ejgdr/canvas-lms/pull/60) — `feat(observability): add InstStatsd metric helpers for summarizer`. Two files added, 177 insertions, 0 deletions:
+
+- `lib/discussion_thread_summarizer/metrics.rb` — 85 lines: `DiscussionThreadSummarizer::Metrics` module with six `self.` methods. All counters use `distributed_increment` (multi-region safe, matching every discussion summary/insight metric in the API controller). The latency helper uses `InstStatsd::Statsd.timing` directly, mirroring `lib/health_checks.rb`. All six methods tag with `account_id: account.global_id` (cross-shard-safe identifier).
+- `spec/lib/discussion_thread_summarizer/metrics_spec.rb` — 92 lines: one `describe` block per helper, each using `allow(InstStatsd::Statsd).to receive(...).and_return(nil)` in a shared `before`, then asserting `have_received` with the exact metric name and tag hash. Pattern mirrors `spec/lib/pandata_events_spec.rb` and `spec/graphql/mutations/update_discussion_entry_participant_spec.rb`.
+
+**Conventions mirrored and deviations noted:**
+- Existing `discussion_topic.summary.*` metrics use flat strings with no tags. This module adds tags (`account_id`, `scope_mode`, `outcome`, `reason`, etc.) to match the broader Canvas convention and satisfy NFR-4's "by account" and "by failure mode" slicing requirements. Deviation from the no-tag precedent in the same controller is intentional and noted.
+- `global_id` chosen over `id` for `account_id` tag — `id` is only unique within a shard; `global_id` is the correct cross-shard identifier for any metric aggregated across a multi-shard Canvas deployment.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-25T22:02:00Z | Todo → In Progress | GitHub UI (MCP unavailable on host) |
+| 2026-05-25T22:05:00Z | QA Status → Pending | GitHub UI (MCP unavailable on host) |
+| 2026-05-25T22:06:00Z | QA Status → Pass | GitHub UI (MCP unavailable on host) |
+| 2026-05-25T22:10:00Z | In Progress → Done | GitHub UI (MCP unavailable on host) |
+
+**Merge evidence.** PR #60 was squash-merged into `master` at commit `3f6c0fd1665dd0cb7bfcca0a31c802198f71cdbd`. Issue #4 was auto-closed by the `Closes #4` line in the PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation`. Exit code 0, **6 examples, 0 failures** (0.78 seconds, seed 45989). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 5.
+
+**Trace to plan.** This slice executes the M1 — Foundations observability story in `agents/tasks/feature-1/implementation-research.md` §6.1 (NFR-4: metrics). The §4.4 codebase finding 8 confirmed the precedent: discussion summary/insight paths use `InstStatsd::Statsd.distributed_increment` and `InstStatsd::Statsd.timing` directly. With `DiscussionThreadSummarizer::Metrics` now on `master`, every M2+ slice that touches generation, caching, failure handling, or report submission can `require` this module and call the appropriate helper without any further observability design decisions. The six metric names (`generation.attempt`, `generation.latency`, `cache.hit`, `cache.miss`, `failure`, `report.submission`) directly map to the NFR-4 requirements and will feed the M8 dashboard without renaming.
+
+---
+*Last verified: 2026-05-25 against commit 3f6c0fd1665dd0cb7bfcca0a31c802198f71cdbd*

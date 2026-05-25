@@ -81,4 +81,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-25 against commit 7d33f1254b216c3e49478530ae0a287cfd213664*
+## Cycle 5 — Observability scaffolding (issue #4, M1 Foundations)
+
+| Field | Content |
+|---|---|
+| Slice | [#4](https://github.com/ejgdr/canvas-lms/issues/4) — "[M1] Observability scaffolding: InstStatsd counters for discussion thread summarizer." Branch `feat/m1-observability-scaffolding`. |
+| Classification | Behavior-changing application code — `metrics.rb` introduces six new module methods with live `InstStatsd` calls; each is tested in `metrics_spec.rb`. The metric names and tag schemas are the observable behavior under test. |
+| Tests added or updated | `spec/lib/discussion_thread_summarizer/metrics_spec.rb` (new file) — six examples, one per helper: (1) `increment_generation_attempt` emits `discussion_thread_summarizer.generation.attempt` with `account_id` and `scope_mode` tags. (2) `record_generation_latency` emits `discussion_thread_summarizer.generation.latency` via `timing` with `account_id` and `outcome` tags. (3) `increment_cache_hit` emits `discussion_thread_summarizer.cache.hit` with `account_id`. (4) `increment_cache_miss` emits `discussion_thread_summarizer.cache.miss` with `account_id`. (5) `increment_failure` emits `discussion_thread_summarizer.failure` with `account_id` and `reason`. (6) `increment_report_submission` emits `discussion_thread_summarizer.report.submission` with `account_id`, `reason_category`, and `reporter_role`. |
+| Command | `docker compose exec web bundle exec rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
+| Outcome | Exit code 0; `6 examples, 0 failures` (finished in 0.78 seconds, seed 45989) |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #60](https://github.com/ejgdr/canvas-lms/pull/60), squash-merged at `3f6c0fd1665dd0cb7bfcca0a31c802198f71cdbd` |
+| Trace to plan | NFR-4 — metrics are required for generation latency (p50/p95/p99), cache hit rate, error rate by failure mode, daily generation count by account, and report submission count by reason category; these six helpers are the instrumentation layer that satisfies all five observability dimensions. |
+
+**Spec pattern mirrored:** `allow(InstStatsd::Statsd).to receive(:distributed_increment).and_return(nil)` in a shared `before` block; `expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(metric_name, tags: {...})` per example. Source: `spec/lib/pandata_events_spec.rb` and `spec/graphql/mutations/update_discussion_entry_participant_spec.rb`. For the timing helper: `allow(InstStatsd::Statsd).to receive(:timing).and_return(nil)` + `have_received(:timing).with(name, value, tags: {...})`, mirroring `spec/integration/track_memory_and_cpu_spec.rb`.
+
+---
+
+*Last verified: 2026-05-25 against commit 3f6c0fd1665dd0cb7bfcca0a31c802198f71cdbd*
