@@ -730,6 +730,56 @@ describe DiscussionTopicsController do
       end
     end
 
+    context "feature-flag inheritance chain" do
+      # TODO (M2/M3): when the summarization job lands, add an example asserting
+      # no job is enqueued and no model call attempted when the resolved state is off.
+
+      let(:topic) do
+        @course.discussion_topics.create!(
+          user: @teacher,
+          title: "Inheritance test topic",
+          message: "Testing account→course flag resolution"
+        )
+      end
+
+      before do
+        user_session(@teacher)
+        # Reset any account- or course-level flag so each example starts
+        # from a known baseline, independent of the ci: allowed_on default.
+        @course.root_account.reset_feature!(:discussion_thread_summarizer)
+        @course.reset_feature!(:discussion_thread_summarizer)
+      end
+
+      it "resolves to false when the account has not enabled the flag and the course has no override" do
+        @course.root_account.allow_feature!(:discussion_thread_summarizer)
+        get "show", params: { course_id: @course.id, id: topic.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(false)
+      end
+
+      it "resolves to true when the account is off but the course overrides to on" do
+        @course.root_account.allow_feature!(:discussion_thread_summarizer)
+        @course.enable_feature!(:discussion_thread_summarizer)
+        get "show", params: { course_id: @course.id, id: topic.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(true)
+      end
+
+      it "resolves to true when the account enables for all courses and the course has no override" do
+        # STATE_DEFAULT_ON ("allowed_on"): on by default, can_override? = true,
+        # so the course can still opt out. STATE_ON would lock the flag and
+        # prevent course-level override (can_override? = false).
+        @course.root_account.set_feature_flag!(:discussion_thread_summarizer, Feature::STATE_DEFAULT_ON)
+        get "show", params: { course_id: @course.id, id: topic.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(true)
+      end
+
+      it "resolves to false when the account enables but the course overrides to off" do
+        @course.root_account.set_feature_flag!(:discussion_thread_summarizer, Feature::STATE_DEFAULT_ON)
+        @course.disable_feature!(:discussion_thread_summarizer)
+        get "show", params: { course_id: @course.id, id: topic.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(false)
+      end
+    end
+
     context "js_env DISCUSSION_TOPIC PERMISSIONS CAN_SET_GROUP" do
       it "CAN_SET_GROUP is true when user is a teacher" do
         user_session(@teacher)
