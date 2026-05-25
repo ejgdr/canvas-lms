@@ -64,4 +64,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-23 against commit 69d86f45561*
+## Cycle 4 — Feature-flag inheritance integration tests (issue #5, M1 Foundations)
+
+| Field | Content |
+|---|---|
+| Slice | [#5](https://github.com/ejgdr/canvas-lms/issues/5) — "[M1] Integration test: feature-flag inheritance (account default → course override)." Branch `test/m1-flag-inheritance-integration`. |
+| Classification | Behavior-changing application code — the diff adds RSpec examples to `spec/controllers/discussion_topics_controller_spec.rb` that exercise `feature_enabled?` resolution through `DiscussionTopicsController#show` under four distinct account/course flag-state combinations. New control-flow branches exercised: `allow_feature!` and `set_feature_flag!(STATE_DEFAULT_ON)` at root-account scope, `enable_feature!` and `disable_feature!` at course scope, and `reset_feature!` in the `before` hook. |
+| Tests added or updated | `spec/controllers/discussion_topics_controller_spec.rb` — four examples added inside `context "feature-flag inheritance chain"` (inside `describe "GET 'show'"`): (1) Given root account `allow_feature!` and no course flag, GET show sets `discussion_thread_summarizer_enabled: false`. (2) Given root account `allow_feature!` and course `enable_feature!`, GET show sets key to `true`. (3) Given root account `set_feature_flag!(STATE_DEFAULT_ON)` and no course flag, GET show sets key to `true`. (4) Given root account `set_feature_flag!(STATE_DEFAULT_ON)` and course `disable_feature!`, GET show sets key to `false`. |
+| Command | `docker compose exec web bundle exec rspec spec/controllers/discussion_topics_controller_spec.rb -e "feature-flag inheritance chain" --format documentation` |
+| Outcome | Exit code 0; `4 examples, 0 failures` (finished in 8.52 seconds, seed 49388) |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #59](https://github.com/ejgdr/canvas-lms/pull/59), squash-merged at `7d33f1254b216c3e49478530ae0a287cfd213664` |
+| Trace to plan | FR-4 — the system must not generate, render, or call out to the summarization model when the feature is disabled for the account or course; these four examples are the living regression guard for the `discussion_thread_summarizer` inheritance chain. |
+
+**First-run failure note.** The initial run produced 1 failure on example 4 ("account enables but course overrides to off"). Root cause: `enable_feature!` sets `STATE_ON`, which makes `can_override? = false`, causing the `lookup_feature_flag` loop to break at the account level and ignore the course's `STATE_OFF` flag entirely. Fix: changed both "account ON" examples (3 and 4) to use `set_feature_flag!(:discussion_thread_summarizer, Feature::STATE_DEFAULT_ON)`, which sets `allowed_on` and keeps `can_override? = true`. One retry performed after the fix; retry was not flake-driven (deterministic root cause), so it does not count as a flake retry under the QA agent guardrails. Second run: 4/4 pass.
+
+---
+
+*Last verified: 2026-05-25 against commit 7d33f1254b216c3e49478530ae0a287cfd213664*

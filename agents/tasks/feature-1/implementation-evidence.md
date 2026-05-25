@@ -84,4 +84,39 @@ This file records completed slice cycles for the Discussion Thread Summarizer fe
 **Trace to plan.** This slice executes the third M1 — Foundations story in `agents/tasks/feature-1/implementation-research.md` §6.1. The §4.4 codebase evidence — `discussion_topic.rb` lines 1445–1502 for `:read` via `visible_for?` and line 1500 for `:moderate_forum` — confirmed that no new `given`/`can` blocks or `RoleOverride` entries are needed. All four acceptance criteria are satisfied by confirming existing gates are present (documented), not by adding new runtime code. With the audit on `master`, M4 (#24, #26) and M5 (#29, #31) implementers have a written reference they can cite when implementing the actual summary and digest endpoints.
 
 ---
-*Last verified: 2026-05-23 against commit dd69253adf5b7229af46068a3db1572a6433fb0e*
+
+## Cycle 4 — Feature-flag inheritance integration tests (M1 Foundations)
+
+**Slice.** Add four RSpec integration examples to `spec/controllers/discussion_topics_controller_spec.rb` covering all account→course inheritance combinations for `discussion_thread_summarizer`. This is the M1 testing story: §5.2 of the research package listed "Feature-flag inheritance" as a required integration point, and issue #5's acceptance criteria mapped directly to the four state combinations.
+
+**Issue.** [#5](https://github.com/ejgdr/canvas-lms/issues/5) — "[M1] Integration test: feature-flag inheritance (account default → course override)." Linked to FR-4 in `agents/tasks/feature-1/implementation-research.md`. Dependencies on #1 (flag declaration) and #2 (controller wiring) were resolved by Cycles 1 and 2.
+
+**Pull request.** [#59](https://github.com/ejgdr/canvas-lms/pull/59) — `test(feature-flags): integration tests for flag inheritance chain`. One file changed, 50 insertions, 0 deletions. The new block `context "feature-flag inheritance chain"` is inserted directly after the existing `context "discussion_thread_summarizer_enabled js_env"` block (Cycle 2 tests) inside `describe "GET 'show'"`:
+
+- Example 1: `allow_feature!` on root account + no course flag → `js_env` false (account allowed/off baseline)
+- Example 2: `allow_feature!` on root account + `enable_feature!` on course → `js_env` true (course opts in)
+- Example 3: `set_feature_flag!(Feature::STATE_DEFAULT_ON)` on root account + no course flag → `js_env` true (account on, inheritable)
+- Example 4: `set_feature_flag!(Feature::STATE_DEFAULT_ON)` on root account + `disable_feature!` on course → `js_env` false (course opts out)
+
+Key implementation note: `enable_feature!` sets `STATE_ON` which makes `can_override? = false`, locking the flag and preventing course override. Tests 3 and 4 instead use `set_feature_flag!(Feature::STATE_DEFAULT_ON)` (`allowed_on`), which keeps `can_override? = true`. This is the correct reading of "account ON" for these acceptance criteria — an account admin enabling the flag without locking it.
+
+A `# TODO (M2/M3)` comment at the top of the context block marks where a no-job-enqueued example should be added once the summarization job code lands (acceptance criterion 5, deferred).
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-25T21:05:00Z | Todo → In Progress | GitHub UI (MCP unavailable on host) |
+| 2026-05-25T21:32:00Z | QA Status → Pending | GitHub UI (MCP unavailable on host) |
+| 2026-05-25T21:40:00Z | QA Status → Fail | GitHub UI — first run: 3/4, example 4 failed (STATE_ON locks flag, course override silently dropped) |
+| 2026-05-25T21:42:00Z | QA Status → Pass | GitHub UI — second run after fix: 4/4 pass |
+| 2026-05-25T21:48:00Z | In Progress → Done | GitHub UI (MCP unavailable on host) |
+
+**Merge evidence.** PR #59 was squash-merged into `master` at commit `7d33f1254b216c3e49478530ae0a287cfd213664`. Issue #5 was auto-closed by the `Closes #5` line in the PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/controllers/discussion_topics_controller_spec.rb -e "feature-flag inheritance chain" --format documentation`. Exit code 0, **4 examples, 0 failures** (8.52 seconds, seed 49388). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 4. Initial run produced 1 failure (see QA evidence); root cause diagnosed and test corrected before re-run.
+
+**Trace to plan.** This slice executes the M1 — Foundations testing story for FR-4 in `agents/tasks/feature-1/implementation-research.md` §5.2 and §6.1. The §4.4 codebase finding Q4 confirmed the `discussion_thread_summarizer` flag follows the `root_opt_in: true`, `applies_to: Course` pattern. The tests now establish a living regression guard for the inheritance chain: any future change to the flag YAML or the `feature_enabled?` resolution path that breaks account→course inheritance will surface immediately on these four examples. The deferred TODO comment connects this slice forward to M2/M3, where the no-job-enqueued assertion for criterion 5 will be added once summarization job code exists.
+
+---
+*Last verified: 2026-05-25 against commit 7d33f1254b216c3e49478530ae0a287cfd213664*
