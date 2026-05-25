@@ -1,0 +1,92 @@
+# frozen_string_literal: true
+
+#
+# Copyright (C) 2026 - present Instructure, Inc.
+#
+# This file is part of Canvas.
+#
+# Canvas is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, version 3 of the License.
+#
+# Canvas is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License along
+# with this program. If not, see <http://www.gnu.org/licenses/>.
+
+describe DiscussionThreadSummarizer::Metrics do
+  let(:account) { instance_double("Account", global_id: 10_000_000_000_001) }
+
+  before do
+    allow(InstStatsd::Statsd).to receive(:distributed_increment).and_return(nil)
+    allow(InstStatsd::Statsd).to receive(:timing).and_return(nil)
+  end
+
+  describe ".increment_generation_attempt" do
+    it "emits discussion_thread_summarizer.generation.attempt with account_id and scope_mode tags" do
+      described_class.increment_generation_attempt(account:, scope_mode: "default")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.generation.attempt",
+        tags: { account_id: 10_000_000_000_001, scope_mode: "default" }
+      )
+    end
+  end
+
+  describe ".record_generation_latency" do
+    it "emits discussion_thread_summarizer.generation.latency with duration, account_id, and outcome tags" do
+      described_class.record_generation_latency(duration_ms: 342, account:, outcome: "success")
+      expect(InstStatsd::Statsd).to have_received(:timing).with(
+        "discussion_thread_summarizer.generation.latency",
+        342,
+        tags: { account_id: 10_000_000_000_001, outcome: "success" }
+      )
+    end
+  end
+
+  describe ".increment_cache_hit" do
+    it "emits discussion_thread_summarizer.cache.hit with account_id tag" do
+      described_class.increment_cache_hit(account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.cache.hit",
+        tags: { account_id: 10_000_000_000_001 }
+      )
+    end
+  end
+
+  describe ".increment_cache_miss" do
+    it "emits discussion_thread_summarizer.cache.miss with account_id tag" do
+      described_class.increment_cache_miss(account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.cache.miss",
+        tags: { account_id: 10_000_000_000_001 }
+      )
+    end
+  end
+
+  describe ".increment_failure" do
+    it "emits discussion_thread_summarizer.failure with account_id and reason tags" do
+      described_class.increment_failure(reason: "timeout", account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.failure",
+        tags: { account_id: 10_000_000_000_001, reason: "timeout" }
+      )
+    end
+  end
+
+  describe ".increment_report_submission" do
+    it "emits discussion_thread_summarizer.report.submission with account_id, reason_category, and reporter_role tags" do
+      described_class.increment_report_submission(
+        account:,
+        reason_category: "missed_viewpoint",
+        reporter_role: "student"
+      )
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.report.submission",
+        tags: { account_id: 10_000_000_000_001, reason_category: "missed_viewpoint", reporter_role: "student" }
+      )
+    end
+  end
+end
