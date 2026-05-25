@@ -98,4 +98,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-25 against commit 3f6c0fd1665dd0cb7bfcca0a31c802198f71cdbd*
+## Cycle 6 — ModelClient interface and StubModelClient (issue #7, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#7](https://github.com/ejgdr/canvas-lms/issues/7) — "[M2] Model-client interface with injectable stub." Branch `feat/m2-model-client-interface`. |
+| Classification | Behavior-changing application code — `model_client.rb` introduces a runtime `raise NotImplementedError` path; `stub_model_client.rb` introduces observable return behavior. Both are directly exercised by the spec. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/model_client_spec.rb` (new file, 4 examples): (1) `ModelClient#summarize` raises `NotImplementedError` matching `/ModelClient#summarize must be implemented/`. (2) `StubModelClient` is a `ModelClient` subclass. (3) `StubModelClient#summarize` returns `FIXED_RESPONSE` unchanged for any payload. (4) `FIXED_RESPONSE` includes `:themes` (Array), `:viewpoints` (Array), `:open_questions` (Array), `:scope_mode` (String), anchoring the contract shape for future slices. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/model_client_spec.rb --format documentation` |
+| Outcome | Exit code 0; `4 examples, 0 failures` (finished in 0.77 seconds, seed 58513) |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #61](https://github.com/ejgdr/canvas-lms/pull/61), squash-merged at `a06f6118f1de` |
+| Trace to plan | FR-1 (generate on demand) and NFR-5 (graceful degradation) — the abstract contract enforces that all model clients raise `TransportError` on failure, enabling uniform rescue in the service and job layers; the stub enables all failure-path tests in issues #13 and #14 without network access. §4.4 finding 8 (RubricLLMService as mockable model-client precedent). |
+
+---
+
+*Last verified: 2026-05-25 against commit a06f6118f1de*

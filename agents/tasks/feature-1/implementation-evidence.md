@@ -151,4 +151,38 @@ A `# TODO (M2/M3)` comment at the top of the context block marks where a no-job-
 **Trace to plan.** This slice executes the M1 — Foundations observability story in `agents/tasks/feature-1/implementation-research.md` §6.1 (NFR-4: metrics). The §4.4 codebase finding 8 confirmed the precedent: discussion summary/insight paths use `InstStatsd::Statsd.distributed_increment` and `InstStatsd::Statsd.timing` directly. With `DiscussionThreadSummarizer::Metrics` now on `master`, every M2+ slice that touches generation, caching, failure handling, or report submission can `require` this module and call the appropriate helper without any further observability design decisions. The six metric names (`generation.attempt`, `generation.latency`, `cache.hit`, `cache.miss`, `failure`, `report.submission`) directly map to the NFR-4 requirements and will feed the M8 dashboard without renaming.
 
 ---
-*Last verified: 2026-05-25 against commit 3f6c0fd1665dd0cb7bfcca0a31c802198f71cdbd*
+
+## Cycle 6 — ModelClient interface and StubModelClient (M2 Summarization service)
+
+**Slice.** Create `app/services/discussion_thread_summarizer/model_client.rb` (abstract base class + `TransportError`) and `app/services/discussion_thread_summarizer/stub_model_client.rb` (deterministic stub), with `spec/services/discussion_thread_summarizer/model_client_spec.rb` (4 examples). No callers wired; the `SummarizationService` orchestrator (issue #6) depends on this interface and lands in Cycle 7.
+
+**Issue.** [#7](https://github.com/ejgdr/canvas-lms/issues/7) — "[M2] Model-client interface with injectable stub." Linked to FR-1 and NFR-5 in `agents/tasks/feature-1/implementation-research.md`. Blocked by issue #6's design (resolved: interface contract defined here, orchestrator in Cycle 7). This slice deliberately honors the one-issue-one-cycle rhythm established in prior cycles; issues #6 and #7 were kept separate rather than bundled.
+
+**Pull request.** [#61](https://github.com/ejgdr/canvas-lms/pull/61) — `feat(summarizer): add ModelClient interface and StubModelClient`. Three files added, 145 insertions, 0 deletions:
+
+- `app/services/discussion_thread_summarizer/model_client.rb` — 48 lines: `DiscussionThreadSummarizer::TransportError` constant at namespace level; `DiscussionThreadSummarizer::ModelClient` abstract base class with `#summarize(payload)` raising `NotImplementedError`. Contract documented: returns a Hash with `:themes`, `:viewpoints`, `:open_questions`, `:scope_mode`.
+- `app/services/discussion_thread_summarizer/stub_model_client.rb` — 41 lines: `DiscussionThreadSummarizer::StubModelClient < ModelClient` with `FIXED_RESPONSE` constant and deterministic `#summarize` returning it unchanged.
+- `spec/services/discussion_thread_summarizer/model_client_spec.rb` — 56 lines: 4 examples across two `describe` blocks verifying the abstract contract and the stub behavior.
+
+**Design decisions recorded:**
+
+- `TransportError` at namespace level (`DiscussionThreadSummarizer::TransportError`), not class-scoped. Future job and controller code rescues a single domain error without knowing which concrete client raised it. Consistent with `CanvasHttp::Error` and `InstLLM::ServiceQuotaExceededError`. When error subclasses arrive (M2/M8), they sit at the same level; extract to `errors.rb` only when they multiply.
+- Layout mirrors `AiExperiences::ConversationStartService` (namespaced directory, one class per file, `initialize` with injected collaborator) rather than `RubricLLMService` (monolithic flat file). `RubricLLMService` informed the payload-in / structured-response-out contract shape but was unsuitable as a layout precedent for a multi-file namespaced service.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-25T23:15:00Z | Todo → In Progress | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9EQ` |
+| 2026-05-25T23:15:00Z | QA Status → Pending | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9EQ` |
+| 2026-05-25T23:18:00Z | QA Status → Pass | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9EQ` |
+| 2026-05-25T23:22:00Z | In Progress → Done | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9EQ` |
+
+**Merge evidence.** PR #61 was squash-merged into `master` at commit `a06f6118f1de`. Issue #7 was auto-closed by the `Closes #7` line in the PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/model_client_spec.rb --format documentation`. Exit code 0, **4 examples, 0 failures** (0.77 seconds, seed 58513). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 6.
+
+**Trace to plan.** This slice executes the M2 model-client story from `agents/tasks/feature-1/implementation-research.md` §6.1 (Summarization service milestone). The §4.4 codebase finding 8 — `RubricLLMService` and `LLMResponse` as the precedent for mockable model-client interfaces — defined the contract shape (payload hash in, structured hash out, raise on failure). With `ModelClient` and `StubModelClient` on `master`, Cycle 7 can wire the `SummarizationService` orchestrator with `client: StubModelClient.new` as its default without any further interface design. The `FIXED_RESPONSE` structure in `StubModelClient` also anchors the response contract for issue #13's unit tests (pseudonymization, scope filter, schema validation) and issue #14's integration test.
+
+---
+*Last verified: 2026-05-25 against commit a06f6118f1de*
