@@ -224,4 +224,41 @@ A `# TODO (M2/M3)` comment at the top of the context block marks where a no-job-
 **Trace to plan.** This slice executes the M2 summarization-service orchestrator story in `agents/tasks/feature-1/implementation-research.md` §6.1. The §4.4 codebase finding 8 — `RubricLLMService` for the payload-in / structured-response-out contract; `AiExperiences::ConversationStartService` for the namespaced-directory layout — defined both the interface shape and the file organisation. With `SummarizationService` on `master`, every downstream M2 slice (pseudonymization #8, scope filter #9, validator #10, cache layer #11, metrics wiring #12) has the exact method stub it needs to replace, and future slices can replace each stub independently without touching the pipeline ordering.
 
 ---
-*Last verified: 2026-05-26 against commit a9caeb3f7d40*
+
+## Cycle 8 — Pseudonymization transform (M2 Summarization service)
+
+**Slice.** Add `DiscussionThreadSummarizer::Pseudonymizer` — the outbound transform that replaces each entry's `:author_name` with a stable per-thread label before any content crosses the application boundary to the model client. Update `SummarizationService#pseudonymize` to call it. The `gather` stub is unchanged; `pseudonymize` gracefully no-ops when `payload[:entries]` is absent, keeping all pre-existing service spec examples green.
+
+**Issue.** [#8](https://github.com/ejgdr/canvas-lms/issues/8) — "[M2] Pseudonymization transform: replace author names with per-thread pseudonyms." Linked to FR-5 in `agents/tasks/feature-1/implementation-research.md`. Blocked by #6 (resolved by Cycle 7).
+
+**Pull request.** [#64](https://github.com/ejgdr/canvas-lms/pull/64) — `[M2] Pseudonymization transform (closes #8)`. Four files changed, 205 insertions, 2 deletions:
+
+- `app/services/discussion_thread_summarizer/pseudonymizer.rb` (new, 62 lines) — `Pseudonymizer.call(entries)` iterates entries in order, assigns first-seen labels ("Author A", "Author B", …), returns `Result = Struct.new(:pseudonymized_entries, :author_map)`. Uses `entry.merge(...)` so original hashes are not mutated.
+- `spec/services/discussion_thread_summarizer/pseudonymizer_spec.rb` (new, 97 lines) — 10 unit examples covering: label output, stability, no-collision, body preservation, author_map, empty input, single-repeated-author, first-seen order, exact format, and no-mutation.
+- `app/services/discussion_thread_summarizer/summarization_service.rb` (modified) — `pseudonymize` now calls `Pseudonymizer.call(entries)`; `return payload if entries.nil? || entries.empty?` guards the no-op path.
+- `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified) — adds a 4th example: stubs `gather` to return a payload with entries, asserts the model client receives only pseudonymized `author_name` values.
+
+**Design decisions recorded:**
+
+- **Ordering rationale.** Order #8 → #9 → #10 derived from the board's blocked-by graph (#9 is blocked by #8 because the scope filter feeds filtered entries into pseudonymize; pseudonymize must exist as a downstream pass). Future cycles should defer to the board when ordering disagrees with a milestone list.
+- **`author_map` scoping.** `Pseudonymizer` returns both `pseudonymized_entries` and `author_map`, but `SummarizationService` currently discards the map (`payload.merge(entries: result.pseudonymized_entries)` — map never forwarded). The map is computed-and-dropped to lock in the full output shape now. When M4 introduces UI rendering of summaries that reference pseudonyms, the map will need to be threaded through the service's return value. Until then, the map is intentionally unused but present.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-26T22:22:00Z | Todo → In Progress | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9Ec` |
+| 2026-05-26T22:22:00Z | QA Status → Pending | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9Ec` |
+| 2026-05-26T22:22:00Z | QA Status → Pass | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9Ec` |
+| 2026-05-26T22:26:00Z | In Progress → Done | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9Ec` |
+
+**Merge evidence.** PR #64 was squash-merged into `master` at commit `3d35daafa68b`. Issue #8 was auto-closed by the `Closes #8` line in the PR body.
+
+**Local verification.** Commands and outcomes:
+- `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/pseudonymizer_spec.rb --format documentation` — exit code 0, **10 examples, 0 failures** (1.45 seconds, seed 39280).
+- `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` — exit code 0, **4 examples, 0 failures** (1.34 seconds, seed 54974). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 8.
+
+**Trace to plan.** This slice executes the M2 pseudonymization story in `agents/tasks/feature-1/implementation-research.md` §6.1 (FR-5: honor scope-limited content mode; pseudonymization is a prerequisite for all modes). The §4.4 codebase finding — `DiscussionEntry belongs_to :user` as the source of display names — defined the entry field to redact (`:author_name`). With `Pseudonymizer` on `master`, Cycle 9 (#9 scope filter) can add its filtering step upstream of pseudonymize without touching the transform itself. The `author_map` output shape also anchors the M4 rendering contract so issue #24 implementers can thread it through without a rework.
+
+---
+*Last verified: 2026-05-26 against commit 3d35daafa68b*
