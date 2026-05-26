@@ -261,4 +261,47 @@ A `# TODO (M2/M3)` comment at the top of the context block marks where a no-job-
 **Trace to plan.** This slice executes the M2 pseudonymization story in `agents/tasks/feature-1/implementation-research.md` §6.1 (FR-5: honor scope-limited content mode; pseudonymization is a prerequisite for all modes). The §4.4 codebase finding — `DiscussionEntry belongs_to :user` as the source of display names — defined the entry field to redact (`:author_name`). With `Pseudonymizer` on `master`, Cycle 9 (#9 scope filter) can add its filtering step upstream of pseudonymize without touching the transform itself. The `author_map` output shape also anchors the M4 rendering contract so issue #24 implementers can thread it through without a rework.
 
 ---
-*Last verified: 2026-05-26 against commit 3d35daafa68b*
+
+## Cycle 9 — Scope-limited content filter (M2 Summarization service)
+
+**Slice.** Replace the `gather` stub in `SummarizationService` with real logic that loads `DiscussionEntry` records ordered by creation time and, when a new hidden root-account flag is enabled, filters entries to instructor posts plus the requesting viewer's own posts. Also declares the new `discussion_thread_summarizer_scope_limited` feature flag. The payload shape produced matches the `{ author_name:, body: }` entry structure that Cycle 8's `Pseudonymizer` expects.
+
+**Issue.** [#9](https://github.com/ejgdr/canvas-lms/issues/9) — "[M2] Scope-limited content filter (instructor + viewer posts only)." Linked to FR-5 in `agents/tasks/feature-1/implementation-research.md`. Blocked by #8 (resolved by Cycle 8).
+
+**Issue #9 body — verbatim quote driving the flag decision:**
+> "Account.site_admin.feature_enabled? shadow-flag precedent controls provider-level settings — the scope-mode flag follows the same per-account configuration pattern"
+
+This citation establishes that scope mode is a per-account (RootAccount) configuration, not a per-thread attribute or an extension of the existing course-level `discussion_thread_summarizer` flag. A new hidden RootAccount flag is the direct implementation of this specification.
+
+**Pull request.** [#66](https://github.com/ejgdr/canvas-lms/pull/66) — `[M2] Scope-limited content filter (closes #9)`. Three files modified, 148 insertions, 7 deletions:
+
+- `config/feature_flags/discussion_thread_summarizer.yml` — adds `discussion_thread_summarizer_scope_limited` as a third sibling entry: `state: hidden`, `applies_to: RootAccount`, no shadow attribute. The two prior flags (`discussion_thread_summarizer` and `discussion_thread_summarizer_with_cedar`) are unchanged.
+- `app/services/discussion_thread_summarizer/summarization_service.rb` — replaces the 3-line gather stub with 28 lines of real logic: loads `discussion_entries.active.order(:created_at).preload(:user).to_a`, reads the scope flag, filters when limited using `|` union of `instructor_user_ids(course)` and `[viewer.id]`, maps to `{ author_name: entry.user&.short_name || "Unknown", body: entry.message || "" }`, emits `scope_mode:` at payload level. Adds private `instructor_user_ids(course)` helper (~7 lines).
+- `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` — adds shared gather-chain stubs to the outer `before` block (keeping the 4 pre-existing examples green), then a new `context "gather pipeline"` block with 6 examples.
+
+**No `ContentGatherer` extraction.** The real `gather` + helper totals ~30 lines — within the threshold stated in the task brief. No extraction needed.
+
+**Design decisions recorded:**
+
+- **Why the flag landed in this slice rather than a separate declaration PR.** The `discussion_thread_summarizer_scope_limited` flag is a prerequisite for exercising the scope filter in tests: without it, the `feature_enabled?` call always returns `false` and the filter branch is dead code in the test environment. Bundling flag declaration and consumer in the same slice keeps the cycle cohesive — one PR, one merged unit, one evidence row — rather than creating a dead-config PR followed by a separate consumer PR with no passing tests.
+- **`pluck`-over-`select` optimization rationale.** The canonical precedent is `DiscussionTopic::PromptPresenter#enrollments_by_user` (`app/models/discussion_topic/prompt_presenter.rb` lines 116–124), which loads `course.enrollments.active.select(:user_id, :type)` and groups types per user because it needs to classify each user as instructor or student. This slice only needs to know which user_ids are instructors after the DB already performs the type filter, so `.where(type: %w[TeacherEnrollment TaEnrollment]).pluck(:user_id).to_set` is the cheaper canonical shape: no Ruby-side grouping, no full enrollment row hydration, direct Set lookup in the filter.
+
+**Scope confirmation.** The new `discussion_thread_summarizer_scope_limited` flag has no relationship to the Cedar routing flag beyond sharing the same YAML file. It is consumed only by `SummarizationService#gather` in this slice. The two prior flags and the project identity (Discussion Thread Summarizer) are unchanged.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-26T22:56:00Z | Todo → In Progress | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9FE` |
+| 2026-05-26T22:56:00Z | QA Status → Pending | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9FE` |
+| 2026-05-26T22:56:00Z | QA Status → Pass | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9FE` |
+| 2026-05-26T22:59:00Z | In Progress → Done | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9FE` |
+
+**Merge evidence.** PR #66 was squash-merged into `master` at commit `1b7fe364de45`. Issue #9 was auto-closed by the `Closes #9` line in the PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation`. Exit code 0, **10 examples, 0 failures** (0.86 seconds, seed 15403). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 9.
+
+**Trace to plan.** This slice executes the M2 scope-limited content filter story in `agents/tasks/feature-1/implementation-research.md` §6.1 (FR-5: honor scope-limited content mode). The §4.4 codebase finding — `context.grants_right?(user, session, :moderate_forum)` as the existing instructor-role check pattern — informed the role-check approach, but `PromptPresenter#enrollments_by_user` was chosen as the direct precedent since it is the only existing Canvas service that classifies users as instructors/students for discussion content purposes. With real `gather` on `master`, the full M2 pipeline (`gather → pseudonymize → client.summarize → validate`) now produces real content for both scope modes; issues #10 (validate), #11 (cache), and #12 (metrics wiring) can all be implemented without revisiting this step.
+
+---
+*Last verified: 2026-05-26 against commit 1b7fe364de45*

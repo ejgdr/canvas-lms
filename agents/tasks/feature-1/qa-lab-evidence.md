@@ -145,4 +145,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-26 against commit 3d35daafa68b*
+## Cycle 9 — Scope-limited content filter (issue #9, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#9](https://github.com/ejgdr/canvas-lms/issues/9) — "[M2] Scope-limited content filter (instructor + viewer posts only)." Branch `feat/m2-scope-limited-content-filter`. |
+| Classification | Behavior-changing application code — `gather` now loads real `DiscussionEntry` records and conditionally filters them; the scope flag and the role-check logic introduce new observable branches. All branches are exercised by the spec. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified) — shared `before` block updated with gather-chain doubles to keep 4 pre-existing examples green; `context "gather pipeline"` block added with 6 new examples: (1) default mode includes all entries. (2) scope-limited excludes non-instructor/non-viewer. (3) scope-limited includes viewer's own entries. (4) viewer-who-is-instructor appears once (no duplication from Set union). (5) scope-limited with no instructor posts → only viewer's entries. (6) `order(:created_at)` is applied before filtering. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; `10 examples, 0 failures` (finished in 0.86 seconds, seed 15403) |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #66](https://github.com/ejgdr/canvas-lms/pull/66), squash-merged at `1b7fe364de45` |
+| Trace to plan | FR-5 — honor scope-limited content mode; the gather filter is the mechanism that ensures non-instructor student content is excluded from the model payload when institutional privacy requirements demand it. The `pluck(:user_id).to_set` role-check mirrors `DiscussionTopic::PromptPresenter#enrollments_by_user` (prompt_presenter.rb:116) but is cheaper: DB-side type filter avoids loading the full enrollment rows that PromptPresenter needs for student/instructor classification. |
+
+---
+
+*Last verified: 2026-05-26 against commit 1b7fe364de45*
