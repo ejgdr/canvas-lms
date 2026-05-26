@@ -113,4 +113,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-25 against commit a06f6118f1de*
+## Cycle 7 — Summarization service scaffold (issue #6, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#6](https://github.com/ejgdr/canvas-lms/issues/6) — "[M2] Summarization service scaffold." Branch `feat/m2-summarization-service-scaffold`. |
+| Classification | Behavior-changing application code — `summarization_service.rb` introduces a real call chain through `gather → pseudonymize → @client.summarize → validate → result`; all three private stubs are exercised in passing by the spec. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (new file, 3 examples): (1) The injected client receives `#summarize` with `hash_including(topic_id: 42)` (payload derivation). (2) The service returns the client's output unchanged in this skeleton (return-value pass-through). (3) An anonymous `ModelClient` subclass returning a distinct hash can be injected and its output flows through unchanged (dependency injection). |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; `3 examples, 0 failures` (finished in 0.73 seconds, seed 19569) |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #62](https://github.com/ejgdr/canvas-lms/pull/62), squash-merged at `a9caeb3f7d40` |
+| Trace to plan | FR-1 (generate on demand) and NFR-5 (graceful degradation) — the service is the only code path that calls the model client; centralising the call here ensures future error handling (TransportError rescue, metrics, cache) can all be added to one place without touching controllers or jobs. §4.4 finding 8 (AiExperiences::ConversationStartService as the namespaced service layout precedent). |
+
+---
+
+*Last verified: 2026-05-26 against commit a9caeb3f7d40*

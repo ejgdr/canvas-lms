@@ -185,4 +185,43 @@ A `# TODO (M2/M3)` comment at the top of the context block marks where a no-job-
 **Trace to plan.** This slice executes the M2 model-client story from `agents/tasks/feature-1/implementation-research.md` §6.1 (Summarization service milestone). The §4.4 codebase finding 8 — `RubricLLMService` and `LLMResponse` as the precedent for mockable model-client interfaces — defined the contract shape (payload hash in, structured hash out, raise on failure). With `ModelClient` and `StubModelClient` on `master`, Cycle 7 can wire the `SummarizationService` orchestrator with `client: StubModelClient.new` as its default without any further interface design. The `FIXED_RESPONSE` structure in `StubModelClient` also anchors the response contract for issue #13's unit tests (pseudonymization, scope filter, schema validation) and issue #14's integration test.
 
 ---
-*Last verified: 2026-05-25 against commit a06f6118f1de*
+
+## Cycle 7 — Summarization service scaffold (M2 Summarization service)
+
+**Slice.** Create `app/services/discussion_thread_summarizer/summarization_service.rb` — the orchestrator that is the only entry point for calling the model client — and `spec/services/discussion_thread_summarizer/summarization_service_spec.rb`. All three private pipeline steps are no-op stubs; each carries a comment naming the future slice that replaces it. No controllers, views, jobs, or cache layers are wired.
+
+**Issue.** [#6](https://github.com/ejgdr/canvas-lms/issues/6) — "[M2] Summarization service scaffold." Linked to FR-1 and NFR-5 in `agents/tasks/feature-1/implementation-research.md`. Blocked by issue #7 (resolved by Cycle 6, PR #61). This cycle honored the one-issue-one-cycle rhythm; issues #6 and #7 were kept separate.
+
+**Pull request.** [#62](https://github.com/ejgdr/canvas-lms/pull/62) — `[M2] Summarization service scaffold (closes #6)`. Two files added, 111 insertions, 0 deletions:
+
+- `app/services/discussion_thread_summarizer/summarization_service.rb` — 62 lines: `DiscussionThreadSummarizer::SummarizationService` with `initialize(client: StubModelClient.new)` and a single public `#summarize(discussion_topic:, viewer:)`. Pipeline: `gather → pseudonymize → @client.summarize → validate → result`.
+- `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` — 49 lines: three examples covering payload derivation, return-value pass-through, and DI substitutability using an anonymous `ModelClient` subclass.
+
+**Stub contract notes:**
+- `gather(discussion_topic, _viewer)` — yields `{ topic_id: discussion_topic.id }`. `_viewer` unused; real scope-limited content extraction lands in a later M2 slice.
+- `pseudonymize(payload)` — pass-through; real author name replacement lands in issue #8.
+- `validate(_result)` — returns `nil`. Contract: raise on schema violation; return value is always discarded. Real validator (issue #10) replaces the body with `raise SchemaError, ...` without touching the pipeline.
+
+**Design decisions recorded:**
+
+- Layout mirrors `AiExperiences::ConversationStartService` (namespaced directory, one class per file, kwarg-injected collaborator, single public action method, no `ApplicationService` base class) rather than the monolithic-flat `RubricLLMService`.
+- `validate(_result)` returns `nil` (not the result) to make the "raise on bad output; return value is discarded" contract unambiguous for the issue #10 implementer. Requested in user review before any file was written.
+- The DI spec example (example 3) uses a genuinely different anonymous subclass — not a second reference to `StubModelClient` — proving that a different output flows unchanged through the service, which is what dependency injection actually demonstrates.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-25T23:43:00Z | Todo → In Progress | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9DY` |
+| 2026-05-25T23:43:00Z | QA Status → Pending | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9DY` |
+| 2026-05-25T23:44:00Z | QA Status → Pass | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9DY` |
+| 2026-05-25T23:50:00Z | In Progress → Done | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9DY` |
+
+**Merge evidence.** PR #62 was squash-merged into `master` at commit `a9caeb3f7d40`. Issue #6 was auto-closed by the `Closes #6` line in the PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation`. Exit code 0, **3 examples, 0 failures** (0.73 seconds, seed 19569). Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 7.
+
+**Trace to plan.** This slice executes the M2 summarization-service orchestrator story in `agents/tasks/feature-1/implementation-research.md` §6.1. The §4.4 codebase finding 8 — `RubricLLMService` for the payload-in / structured-response-out contract; `AiExperiences::ConversationStartService` for the namespaced-directory layout — defined both the interface shape and the file organisation. With `SummarizationService` on `master`, every downstream M2 slice (pseudonymization #8, scope filter #9, validator #10, cache layer #11, metrics wiring #12) has the exact method stub it needs to replace, and future slices can replace each stub independently without touching the pipeline ordering.
+
+---
+*Last verified: 2026-05-26 against commit a9caeb3f7d40*
