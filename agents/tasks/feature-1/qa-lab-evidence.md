@@ -128,4 +128,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-26 against commit a9caeb3f7d40*
+## Cycle 8 — Pseudonymization transform (issue #8, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#8](https://github.com/ejgdr/canvas-lms/issues/8) — "[M2] Pseudonymization transform: replace author names with per-thread pseudonyms." Branch `feat/m2-pseudonymizer`. |
+| Classification | Behavior-changing application code — `pseudonymizer.rb` introduces a live transform with observable output; `summarization_service.rb` now calls it in the pipeline. Both files' behavior is directly exercised by the specs. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/pseudonymizer_spec.rb` (new, 10 examples): (1) All real names replaced with pseudonyms. (2) Same author → same label (stability). (3) Distinct authors → distinct labels. (4) Body text unchanged. (5) `author_map` pairs real names → labels. (6) Empty input → empty result + empty map. (7) Single repeated author → one map entry. (8) First-seen order (Alice→A, Bob→B, Carol→C). (9) Exact format `"Author X"`. (10) Original entry hashes not mutated. `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified, +1 example): stubs `gather` to inject entries, asserts model client payload contains only pseudonymized `author_name` values. |
+| Command (pseudonymizer) | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/pseudonymizer_spec.rb --format documentation` |
+| Outcome (pseudonymizer) | Exit code 0; `10 examples, 0 failures` (finished in 1.45 seconds, seed 39280) |
+| Command (service) | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome (service) | Exit code 0; `4 examples, 0 failures` (finished in 1.34 seconds, seed 54974) |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #64](https://github.com/ejgdr/canvas-lms/pull/64), squash-merged at `3d35daafa68b` |
+| Trace to plan | FR-5 — honor scope-limited content mode; pseudonymization is the prerequisite that ensures no real author identities reach the model client. The transform is correct regardless of whether `gather` has been updated to load real entries (no-op when `:entries` absent), satisfying the acceptance criterion "raw payloads containing original display names are never logged or persisted" at the service layer. |
+
+---
+
+*Last verified: 2026-05-26 against commit 3d35daafa68b*
