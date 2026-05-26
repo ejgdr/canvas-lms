@@ -49,8 +49,12 @@ module DiscussionThreadSummarizer
     end
 
     def pseudonymize(payload)
-      # Stub: real author pseudonymization lands in issue #8.
-      payload
+      entries = payload[:entries]
+      return payload if entries.nil? || entries.empty?
+
+      result = Pseudonymizer.call(entries)
+      # author_map stays in memory only — never logged or forwarded.
+      payload.merge(entries: result.pseudonymized_entries)
     end
 
     def validate(_result)

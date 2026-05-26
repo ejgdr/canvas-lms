@@ -46,5 +46,33 @@ describe DiscussionThreadSummarizer::SummarizationService do
                               .summarize(discussion_topic: topic, viewer:)
       expect(result[:themes]).to eq(["from custom client"])
     end
+
+    it "strips real author names from the payload when entries are present" do
+      capturing_client = Class.new(DiscussionThreadSummarizer::ModelClient) do
+        attr_reader :received_payload
+
+        def summarize(payload)
+          @received_payload = payload
+          { themes: [], viewpoints: [], open_questions: [], scope_mode: "default" }
+        end
+      end.new
+
+      svc = described_class.new(client: capturing_client)
+      allow(svc).to receive(:gather).and_return(
+        {
+          topic_id: 42,
+          entries:  [
+            { author_name: "Alice", body: "post one"   },
+            { author_name: "Bob",   body: "post two"   },
+            { author_name: "Alice", body: "post three" },
+          ]
+        }
+      )
+      svc.summarize(discussion_topic: topic, viewer:)
+
+      received_names = capturing_client.received_payload[:entries].map { |e| e[:author_name] }
+      expect(received_names).to eq(["Author A", "Author B", "Author A"])
+      expect(received_names).not_to include("Alice", "Bob")
+    end
   end
 end
