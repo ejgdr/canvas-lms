@@ -43,9 +43,42 @@ module DiscussionThreadSummarizer
 
     private
 
-    def gather(discussion_topic, _viewer)
-      # Stub: real content extraction lands in a later M2 slice.
-      { topic_id: discussion_topic.id }
+    def gather(discussion_topic, viewer)
+      course        = discussion_topic.context
+      scope_limited = course.root_account.feature_enabled?(
+        :discussion_thread_summarizer_scope_limited
+      )
+      scope_mode    = scope_limited ? "limited" : "default"
+
+      raw_entries = discussion_topic.discussion_entries
+                                    .active
+                                    .order(:created_at)
+                                    .preload(:user)
+                                    .to_a
+
+      if scope_limited
+        allowed_ids = instructor_user_ids(course) | [viewer.id]
+        raw_entries = raw_entries.select { |e| allowed_ids.include?(e.user_id) }
+      end
+
+      {
+        topic_id:   discussion_topic.id,
+        scope_mode:,
+        entries:    raw_entries.map do |entry|
+                      { author_name: entry.user&.short_name || "Unknown",
+                        body:        entry.message || "" }
+                    end
+      }
+    end
+
+    def instructor_user_ids(course)
+      # Mirrors PromptPresenter#enrollments_by_user (prompt_presenter.rb:116) but
+      # cheaper: DB-side type filter + pluck avoids loading full enrollment rows.
+      course.enrollments
+            .active
+            .where(type: %w[TeacherEnrollment TaEnrollment])
+            .pluck(:user_id)
+            .to_set
     end
 
     def pseudonymize(payload)
