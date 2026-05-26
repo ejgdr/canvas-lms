@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 describe DiscussionThreadSummarizer::SummarizationService do
-  let(:root_account)     { instance_double("Account") }
+  let(:root_account)     { instance_double("Account", global_id: 10_000_000_000_001) }
   let(:course)           { instance_double("Course", root_account:) }
   let(:stub_client)      { DiscussionThreadSummarizer::StubModelClient.new }
   let(:service)          { described_class.new(client: stub_client) }
@@ -91,6 +91,37 @@ describe DiscussionThreadSummarizer::SummarizationService do
       received_names = capturing_client.received_payload[:entries].map { |e| e[:author_name] }
       expect(received_names).to eq(["Author A", "Author B", "Author A"])
       expect(received_names).not_to include("Alice", "Bob")
+    end
+  end
+
+  # ── Schema validator wiring (Cycle 10) ───────────────────────────────────
+
+  context "schema validation" do
+    let(:malformed_client) do
+      Class.new(DiscussionThreadSummarizer::ModelClient) do
+        def summarize(_payload)
+          { themes: nil }  # missing required keys + wrong type
+        end
+      end.new
+    end
+
+    it "propagates SchemaViolationError when the client returns malformed output" do
+      svc = described_class.new(client: malformed_client)
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::SchemaViolationError)
+    end
+
+    it "emits failure metric with reason 'schema_invalid' before re-raising" do
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_failure)
+      svc = described_class.new(client: malformed_client)
+
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::SchemaViolationError)
+
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_failure).with(
+        reason:  "schema_invalid",
+        account: root_account
+      )
     end
   end
 

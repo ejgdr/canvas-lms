@@ -34,10 +34,16 @@ module DiscussionThreadSummarizer
     end
 
     def summarize(discussion_topic:, viewer:)
+      account = discussion_topic.context.root_account
       payload = gather(discussion_topic, viewer)
       payload = pseudonymize(payload)
       result  = @client.summarize(payload)
-      validate(result)
+      begin
+        validate(result)
+      rescue DiscussionThreadSummarizer::SchemaViolationError
+        Metrics.increment_failure(reason: "schema_invalid", account:)
+        raise
+      end
       result
     end
 
@@ -90,9 +96,8 @@ module DiscussionThreadSummarizer
       payload.merge(entries: result.pseudonymized_entries)
     end
 
-    def validate(_result)
-      # Stub: real validator (issue #10) raises on schema violation; this is a no-op.
-      nil
+    def validate(result)
+      OutputSchemaValidator.call(result)
     end
   end
 end
