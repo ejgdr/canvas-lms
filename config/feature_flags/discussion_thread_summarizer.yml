@@ -22,3 +22,12 @@ discussion_thread_summarizer_with_cedar:
   description: >-
     Routes Discussion Thread Summarizer requests through Cedar
     instead of direct model calls.
+
+discussion_thread_summarizer_scope_limited:
+  state: hidden
+  applies_to: RootAccount
+  display_name: Discussion Thread Summarizer – Scope-Limited Mode
+  description: >-
+    When enabled for a root account, discussion thread summaries include
+    only instructor posts and the requesting viewer's own posts.
+    Addresses privacy concerns for institutional adoption (FR-5).

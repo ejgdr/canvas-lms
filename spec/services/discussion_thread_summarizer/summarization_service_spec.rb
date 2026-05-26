@@ -18,10 +18,28 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 describe DiscussionThreadSummarizer::SummarizationService do
-  let(:stub_client) { DiscussionThreadSummarizer::StubModelClient.new }
-  let(:service)     { described_class.new(client: stub_client) }
-  let(:topic)       { instance_double("DiscussionTopic", id: 42) }
-  let(:viewer)      { instance_double("User") }
+  let(:root_account)     { instance_double("Account") }
+  let(:course)           { instance_double("Course", root_account:) }
+  let(:stub_client)      { DiscussionThreadSummarizer::StubModelClient.new }
+  let(:service)          { described_class.new(client: stub_client) }
+  let(:topic)            { instance_double("DiscussionTopic", id: 42, context: course) }
+  let(:viewer)           { instance_double("User", id: 99) }
+  let(:entries_relation) { double("AR::Relation") }
+
+  # Default gather-chain stubs: default mode, no entries.
+  # Keeps the four pre-existing #summarize examples working unchanged.
+  before do
+    allow(root_account).to receive(:feature_enabled?)
+      .with(:discussion_thread_summarizer_scope_limited)
+      .and_return(false)
+    allow(topic).to receive(:discussion_entries).and_return(entries_relation)
+    allow(entries_relation).to receive(:active).and_return(entries_relation)
+    allow(entries_relation).to receive(:order).and_return(entries_relation)
+    allow(entries_relation).to receive(:preload).and_return(entries_relation)
+    allow(entries_relation).to receive(:to_a).and_return([])
+  end
+
+  # ── Pre-existing #summarize contract examples (Cycles 7–8, unchanged) ────
 
   describe "#summarize" do
     it "calls the injected client with a payload derived from the topic" do
@@ -73,6 +91,87 @@ describe DiscussionThreadSummarizer::SummarizationService do
       received_names = capturing_client.received_payload[:entries].map { |e| e[:author_name] }
       expect(received_names).to eq(["Author A", "Author B", "Author A"])
       expect(received_names).not_to include("Alice", "Bob")
+    end
+  end
+
+  # ── Gather pipeline (Cycle 9) ─────────────────────────────────────────────
+
+  context "gather pipeline" do
+    # Lightweight entry builder: avoids DB while giving gather everything it reads.
+    def make_entry(user_id:, name:, message:)
+      user = instance_double("User", short_name: name)
+      instance_double("DiscussionEntry", user_id:, user:, message:)
+    end
+
+    let(:student_entry)  { make_entry(user_id: 1,  name: "Alice",   message: "student post")  }
+    let(:student2_entry) { make_entry(user_id: 2,  name: "Bob",     message: "bob post")      }
+    let(:teacher_entry)  { make_entry(user_id: 3,  name: "Teacher", message: "teacher post")  }
+    let(:viewer_entry)   { make_entry(user_id: 99, name: "Viewer",  message: "viewer post")   }
+
+    before do
+      # Default for this context: all three entries, default mode.
+      allow(entries_relation).to receive(:to_a)
+        .and_return([student_entry, teacher_entry, student2_entry])
+    end
+
+    it "default mode includes all entries in the payload" do
+      payload = service.send(:gather, topic, viewer)
+      expect(payload[:scope_mode]).to eq("default")
+      expect(payload[:entries].map { |e| e[:author_name] })
+        .to eq(["Alice", "Teacher", "Bob"])
+    end
+
+    it "scope-limited mode excludes non-instructor, non-viewer entries" do
+      allow(root_account).to receive(:feature_enabled?)
+        .with(:discussion_thread_summarizer_scope_limited).and_return(true)
+      allow(service).to receive(:instructor_user_ids).and_return(Set[3])
+
+      payload = service.send(:gather, topic, viewer)
+      expect(payload[:scope_mode]).to eq("limited")
+      # alice (1) and bob (2) are neither instructors nor viewer (99) — excluded
+      expect(payload[:entries].map { |e| e[:author_name] }).to eq(["Teacher"])
+    end
+
+    it "scope-limited mode includes the viewer's own entries alongside instructor entries" do
+      allow(root_account).to receive(:feature_enabled?)
+        .with(:discussion_thread_summarizer_scope_limited).and_return(true)
+      allow(entries_relation).to receive(:to_a)
+        .and_return([student_entry, teacher_entry, viewer_entry])
+      allow(service).to receive(:instructor_user_ids).and_return(Set[3])
+
+      payload = service.send(:gather, topic, viewer)
+      names = payload[:entries].map { |e| e[:author_name] }
+      expect(names).to contain_exactly("Teacher", "Viewer")
+      expect(names).not_to include("Alice")
+    end
+
+    it "viewer who is also an instructor appears once, not duplicated" do
+      # viewer.id (3) overlaps with instructor set — union prevents duplication
+      viewer_as_instructor = instance_double("User", id: 3)
+      allow(root_account).to receive(:feature_enabled?)
+        .with(:discussion_thread_summarizer_scope_limited).and_return(true)
+      allow(entries_relation).to receive(:to_a).and_return([teacher_entry])
+      allow(service).to receive(:instructor_user_ids).and_return(Set[3])
+
+      payload = service.send(:gather, topic, viewer_as_instructor)
+      expect(payload[:entries].size).to eq(1)
+      expect(payload[:entries].first[:author_name]).to eq("Teacher")
+    end
+
+    it "scope-limited with no instructor posts produces only viewer's entries" do
+      allow(root_account).to receive(:feature_enabled?)
+        .with(:discussion_thread_summarizer_scope_limited).and_return(true)
+      allow(entries_relation).to receive(:to_a)
+        .and_return([student_entry, student2_entry, viewer_entry])
+      allow(service).to receive(:instructor_user_ids).and_return(Set.new)
+
+      payload = service.send(:gather, topic, viewer)
+      expect(payload[:entries].map { |e| e[:author_name] }).to eq(["Viewer"])
+    end
+
+    it "ordering is applied before filtering: order(:created_at) is called on the relation" do
+      expect(entries_relation).to receive(:order).with(:created_at).and_return(entries_relation)
+      service.send(:gather, topic, viewer)
     end
   end
 end
