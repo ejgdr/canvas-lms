@@ -304,4 +304,52 @@ This citation establishes that scope mode is a per-account (RootAccount) configu
 **Trace to plan.** This slice executes the M2 scope-limited content filter story in `agents/tasks/feature-1/implementation-research.md` §6.1 (FR-5: honor scope-limited content mode). The §4.4 codebase finding — `context.grants_right?(user, session, :moderate_forum)` as the existing instructor-role check pattern — informed the role-check approach, but `PromptPresenter#enrollments_by_user` was chosen as the direct precedent since it is the only existing Canvas service that classifies users as instructors/students for discussion content purposes. With real `gather` on `master`, the full M2 pipeline (`gather → pseudonymize → client.summarize → validate`) now produces real content for both scope modes; issues #10 (validate), #11 (cache), and #12 (metrics wiring) can all be implemented without revisiting this step.
 
 ---
-*Last verified: 2026-05-26 against commit 1b7fe364de45*
+
+## Cycle 10 — Output schema validator (M2 Summarization service)
+
+**Slice.** Add `DiscussionThreadSummarizer::OutputSchemaValidator` — a pure raise-on-invalid schema guard that inspects model responses before they can reach the cache. Also declares `DiscussionThreadSummarizer::SchemaViolationError` at namespace level. Updates `SummarizationService#summarize` to rescue `SchemaViolationError`, emit the `schema_invalid` failure metric, and re-raise — satisfying AC #4 (observability on rejection) while keeping the validator itself a pure transform with no cross-cutting concerns.
+
+**Issue.** [#10](https://github.com/ejgdr/canvas-lms/issues/10) — "[M2] Output schema validator: reject malformed model responses before caching." Linked to FR-8 and NFR-5 in `agents/tasks/feature-1/implementation-research.md`. Blocked by #6 (resolved by Cycle 6).
+
+**Issue #10 body — verbatim acceptance criteria driving key decisions:**
+> "A response missing the `themes`, `viewpoints`, or `open_questions` fields is rejected and never written to cache"
+> "A response with any field exceeding the configured max-length is rejected"
+> "A response with a type-mismatched field (e.g. array where string expected) is rejected"
+> "Rejected responses increment `discussion_thread_summarizer.schema_validation_failure` metric"
+
+The fourth AC ("increment metric") was honoured in this slice rather than deferred to issue #12. Rationale: the `Metrics.increment_failure(reason: "schema_invalid", account:)` helper scaffolded in Cycle 5 is exactly the call site this AC activates; issue #12 covers per-generation audit log persistence, a different observability surface. Metric emission was placed in the service rescue block (not the validator) so the validator stays a pure raise-on-invalid transform and the account is already in scope.
+
+`:scope_mode` is validated in addition to the three keys named in the AC, because the `ModelClient` contract in `model_client.rb` lines 39–40 documents it as a required fourth field. The AC covers minimum correctness, not exhaustive coverage.
+
+**Pull request.** [#68](https://github.com/ejgdr/canvas-lms/pull/68) — `[M2] Output schema validator (closes #10)`. Four files changed, 250 insertions, 5 deletions:
+
+- `app/services/discussion_thread_summarizer/output_schema_validator.rb` (new, 90 lines) — `SchemaViolationError = Class.new(StandardError)` at namespace level; `OutputSchemaValidator.call(result)` checks: result is a Hash, each of three array keys exists + is Array + ≤20 items + each element is String ≤500 chars; `:scope_mode` exists + is String ≤50 chars. Raises `SchemaViolationError` with descriptive message; returns `nil` on pass.
+- `spec/services/discussion_thread_summarizer/output_schema_validator_spec.rb` (new, 110 lines) — 13 unit examples covering all validator branches including all three size-limit constants.
+- `app/services/discussion_thread_summarizer/summarization_service.rb` (modified) — `summarize` gains `account = discussion_topic.context.root_account` and a `begin/rescue SchemaViolationError` block that calls `Metrics.increment_failure` and re-raises. `validate` replaces the 2-line stub with `OutputSchemaValidator.call(result)`.
+- `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified) — adds `global_id: 10_000_000_000_001` to the shared `root_account` double (required by the Metrics call path); adds 2 wiring examples in a `context "schema validation"` block.
+
+**Canvas validation precedent.** `DiscussionTopicInsight#validate_llm_response` (`app/models/discussion_topic_insight.rb` lines 167–199) — plain Ruby, raises `ArgumentError` with descriptive messages, checks `is_a?` type then required fields then value constraints. This is the closest existing Canvas precedent for gem-free LLM response validation. Mirrored the guard-before-persist pattern; raised `SchemaViolationError` instead of `ArgumentError` to match namespace conventions.
+
+**Design decisions recorded:**
+
+- **AC #4 wired here, not deferred to #12.** Validator stays pure (raise-on-invalid only); cross-cutting observability lives at the service boundary where the account is already in scope. This mirrors how Cycle 5's `Metrics` module was designed to be called from contextual code paths, not from low-level transforms.
+- **All three MAX constants are under test.** `MAX_ARRAY_LENGTH`, `MAX_STRING_LENGTH`, and `MAX_SCOPE_MODE_LENGTH` each have a dedicated failing-case example. Constraints defined without tests are not enforced — a future refactor that removes a check would pass CI silently.
+- **First-run fix.** One failure on first run: `root_account` double lacked `global_id` stub. Adding `global_id: 10_000_000_000_001` to the shared `let` resolved it; `global_id` is a real `Account` method (Switchman gem) so `instance_double` accepts it.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-26T23:31:00Z | Todo → In Progress | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9GY` |
+| 2026-05-26T23:31:00Z | QA Status → Pending | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9GY` |
+| 2026-05-26T23:31:00Z | QA Status → Pass | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9GY` |
+| 2026-05-26T23:34:00Z | In Progress → Done | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9GY` |
+
+**Merge evidence.** PR #68 was squash-merged into `master` at commit `32b38f84a55d`. Issue #10 was auto-closed by the `Closes #10` line in the PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/output_schema_validator_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation`. Exit code 0, **25 examples, 0 failures** (1.39 seconds, seed 46290). First run had 1 failure (see design decisions); second run after fix: 25/25. Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 10.
+
+**Trace to plan.** This slice executes the M2 schema validation story in `agents/tasks/feature-1/implementation-research.md` §6.1 (FR-8: graceful degradation; NFR-5: reliability). With `OutputSchemaValidator` on `master`, the full pipeline from `gather` through `validate` is now real end-to-end: any malformed model response raises before reaching the caller, emits a metric, and is never written to cache. Issue #13 (unit tests for the full pipeline) and issue #14 (integration test) can now be written against a complete service.
+
+---
+*Last verified: 2026-05-26 against commit 32b38f84a55d*
