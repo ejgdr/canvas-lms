@@ -160,4 +160,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-26 against commit 1b7fe364de45*
+## Cycle 10 — Output schema validator (issue #10, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#10](https://github.com/ejgdr/canvas-lms/issues/10) — "[M2] Output schema validator: reject malformed model responses before caching." Branch `feat/m2-output-schema-validator`. |
+| Classification | Behavior-changing application code — `OutputSchemaValidator` introduces live raise paths; `SummarizationService#summarize` gains a rescue block with metric emission. Both paths are directly exercised by specs. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/output_schema_validator_spec.rb` (new, 13 examples): valid pass (nil return + no raise), FIXED_RESPONSE regression, 4× missing key, 2× wrong type at key level, nested element type mismatch, MAX_ARRAY_LENGTH exceeded, MAX_STRING_LENGTH exceeded, MAX_SCOPE_MODE_LENGTH exceeded, non-Hash top-level guard. `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified, +2 examples in `context "schema validation"`): (1) malformed client → `SchemaViolationError` propagates; (2) malformed client → `Metrics.increment_failure` called with `reason: "schema_invalid"` and `account: root_account`. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/output_schema_validator_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; `25 examples, 0 failures` (finished in 1.39 seconds, seed 46290). First run: 1 failure (root_account double missing global_id stub). Second run after fix: 25/25. |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #68](https://github.com/ejgdr/canvas-lms/pull/68), squash-merged at `32b38f84a55d` |
+| Trace to plan | FR-8 (graceful degradation when summarization service unavailable) and NFR-5 (reliability) — the validator is the guard-before-persist pattern cited in the issue body (`DiscussionTopicInsight#validate_llm_response` at discussion_topic_insight.rb:167 as the Canvas precedent). AC #4 (metric emission on rejection) satisfied via service-layer rescue; validator stays a pure raise-on-invalid transform. |
+
+**First-run failure note.** Example "propagates SchemaViolationError when the client returns malformed output" failed because the rescue block called `Metrics.increment_failure(account: root_account)` which internally calls `root_account.global_id`, and the `instance_double("Account")` had no `global_id` stub. Fix: added `global_id: 10_000_000_000_001` to the shared `let(:root_account)`. Not a flake — deterministic missing-stub error.
+
+---
+
+*Last verified: 2026-05-26 against commit 32b38f84a55d*
