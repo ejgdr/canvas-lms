@@ -137,6 +137,25 @@ class DiscussionTopicsApiController < ApplicationController
     render(json: { id: summary.id, text: summary.summary, userInput: summary.user_input, obsolete: summary_obsolete, usage: { currentCount: current_count, limit: } })
   end
 
+  # @API Thread summary render status (Discussion Thread Summarizer)
+  #
+  # Read-only lookup for per-thread summary render state. Does not block on
+  # generation; enqueues a background job when status is stale or generating.
+  #
+  # @example_request
+  #
+  #     curl https://<canvas>/api/v1/courses/<course_id>/discussion_topics/<topic_id>/thread_summary \
+  #         -H 'Authorization: Bearer <token>'
+  def thread_summary
+    result = DiscussionThreadSummarizer::SummarizationService.new.lookup_for_render(
+      discussion_topic: @topic,
+      viewer: @current_user,
+      locale: I18n.locale.to_s
+    )
+
+    render(json: thread_summary_json(result))
+  end
+
   # @API Find or Create Summary
   #
   # Generates a summary for a discussion topic. Returns the summary text and usage information.
@@ -1343,6 +1362,20 @@ class DiscussionTopicsApiController < ApplicationController
     }
 
     { content: refined_dynamic_content, hash: Digest::SHA256.hexdigest(refined_dynamic_content.to_json) }
+  end
+
+  def thread_summary_json(result)
+    if result.status == :disabled
+      return { status: "disabled", enabled: false, enqueued: false }
+    end
+
+    {
+      status: result.status.to_s,
+      enabled: true,
+      enqueued: result.enqueued,
+      summary: result.result,
+      record_id: result.record&.id
+    }
   end
 
   def fetch_or_create_summary(llm_config:, dynamic_content:, dynamic_content_hash:, user_input:, parent_summary: nil, locale: nil)

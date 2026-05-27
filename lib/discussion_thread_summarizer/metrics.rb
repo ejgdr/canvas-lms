@@ -112,6 +112,54 @@ module DiscussionThreadSummarizer
       )
     end
 
+    # Emitted when render lookup serves a current (hash-matched) summary.
+    def self.increment_render_current(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.render.current",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when render lookup serves a stale summary (hash orphan).
+    def self.increment_render_stale(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.render.stale",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when render lookup finds no summary row for the locale.
+    def self.increment_render_generating(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.render.generating",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when preview denies refresh and a stale row exists.
+    def self.increment_render_rate_limited_stale(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.render.rate_limited_stale",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when preview denies refresh and no summary row exists.
+    def self.increment_render_rate_limited_empty(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.render.rate_limited_empty",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when the feature flag is off at render lookup time.
+    def self.increment_render_disabled(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.render.disabled",
+        tags: { account_id: account.global_id }
+      )
+    end
+
     # Emitted when a user submits an inaccuracy report against a summary.
     # reason_category: one of "inaccurate", "missed_viewpoint",
     #                  "harmful_content", "other"

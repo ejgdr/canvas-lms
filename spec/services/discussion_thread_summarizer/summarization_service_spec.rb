@@ -633,3 +633,145 @@ describe "DiscussionThreadSummarizer::SummarizationService#fetch_or_create_summa
     end
   end
 end
+
+# Render-path lookup (Cycle 19, #84) — separate describe; described_class must be SummarizationService.
+describe DiscussionThreadSummarizer::SummarizationService, "#lookup_for_render" do
+  let(:lookup_course)  { course_model }
+  let(:lookup_user)    { user_model }
+  let(:lookup_topic)   { lookup_course.discussion_topics.create! }
+  let(:stub_client)    { DiscussionThreadSummarizer::StubModelClient.new }
+  let(:lookup_service) { described_class.new(client: stub_client) }
+  let(:lookup_locale)  { "en" }
+  let(:lookup_hash)    { DiscussionThreadSummarizer::ContentVersionHash.call(lookup_topic) }
+
+  before do
+    lookup_course.enable_feature!(:discussion_thread_summarizer)
+    lookup_topic.discussion_entries.create!(user: lookup_user, message: "hello")
+    allow(Canvas).to receive(:redis_enabled?).and_return(true)
+    allow(Canvas.redis).to receive(:get).and_return(nil)
+  end
+
+  def seed_lookup_summary(hash: lookup_hash, locale: lookup_locale, created_at: Time.zone.now)
+    lookup_topic.summaries.create!(
+      user: lookup_user,
+      locale:,
+      summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+      dynamic_content_hash: hash,
+      llm_config_version: described_class::LLM_CONFIG_VERSION,
+      created_at:
+    )
+  end
+
+  it "returns :disabled without touching Redis when the feature flag is off" do
+    lookup_course.disable_feature!(:discussion_thread_summarizer)
+    expect(Canvas.redis).not_to receive(:get)
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.status).to eq(:disabled)
+    expect(result.enqueued).to be(false)
+  end
+
+  it "returns :current without enqueuing when the latest row hash matches" do
+    seed_lookup_summary
+    expect(described_class).not_to receive(:enqueue_for)
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.status).to eq(:current)
+    expect(result.enqueued).to be(false)
+    expect(result.result).to eq(DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE)
+  end
+
+  it "returns :stale and enqueues when the row hash is an orphan" do
+    seed_lookup_summary(hash: "0" * 64)
+    expect(described_class).to receive(:enqueue_for).with(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user
+    )
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.status).to eq(:stale)
+    expect(result.enqueued).to be(true)
+  end
+
+  it "returns :generating and enqueues when no summary row exists" do
+    expect(described_class).to receive(:enqueue_for).with(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user
+    )
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.status).to eq(:generating)
+    expect(result.record).to be_nil
+    expect(result.enqueued).to be(true)
+  end
+
+  it "returns :rate_limited_stale without enqueuing when preview denies and a row exists" do
+    seed_lookup_summary(hash: "0" * 64)
+    cooldown = ["discussion_thread_summarizer", "cooldown", lookup_user.id, lookup_topic.id].cache_key
+    allow(Canvas.redis).to receive(:get) { |key| key == cooldown ? "1" : nil }
+    expect(described_class).not_to receive(:enqueue_for)
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.status).to eq(:rate_limited_stale)
+    expect(result.enqueued).to be(false)
+  end
+
+  it "returns :rate_limited_empty without enqueuing when preview denies and no row exists" do
+    cooldown = ["discussion_thread_summarizer", "cooldown", lookup_user.id, lookup_topic.id].cache_key
+    allow(Canvas.redis).to receive(:get) { |key| key == cooldown ? "1" : nil }
+    expect(described_class).not_to receive(:enqueue_for)
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.status).to eq(:rate_limited_empty)
+    expect(result.enqueued).to be(false)
+  end
+
+  it "uses the latest orphan row when multiple rows exist for the same locale" do
+    seed_lookup_summary(hash: "0" * 64, created_at: 2.hours.ago)
+    newer = seed_lookup_summary(
+      hash: "1" * 64,
+      created_at: 1.hour.ago,
+      locale: lookup_locale
+    )
+    allow(described_class).to receive(:enqueue_for)
+
+    result = lookup_service.lookup_for_render(
+      discussion_topic: lookup_topic,
+      viewer: lookup_user,
+      locale: lookup_locale
+    )
+
+    expect(result.record.id).to eq(newer.id)
+    expect(result.status).to eq(:stale)
+  end
+end
