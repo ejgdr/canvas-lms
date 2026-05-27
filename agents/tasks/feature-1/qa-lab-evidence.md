@@ -314,4 +314,25 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011*
+## Cycle 19 — Render-path lookup + GET endpoint (issue #84, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#84](https://github.com/ejgdr/canvas-lms/issues/84) — "[M3] Thread render-path API: stale-aware lookup + render states." Branch `feat/m3-render-lookup`. |
+| Classification | Behavior-changing application code — `lookup_for_render`, `RegenerationRateLimiter.preview`, GET `thread_summary`, render metrics. |
+| Hygiene | *Last verified* for Cycle 18 row confirmed at `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011` (no backfill needed). Pre-branch: #84 re-scoped API-only; #95 UI + #96 index backlog filed. |
+| Tests added or updated | `regeneration_rate_limiter_spec.rb` (+3 `.preview`); `summarization_service_spec.rb` (+7 `lookup_for_render` in top-level `describe`); `discussion_topics_api_controller_spec.rb` (+3 `thread_summary`); `integration/render_lookup_spec.rb` (new, 1 example: `:generating` → enqueue → job → `:current`). |
+| Command | `docker compose run --rm web bin/rspec spec/services/discussion_thread_summarizer/regeneration_rate_limiter_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb spec/controllers/discussion_topics_api_controller_spec.rb spec/services/discussion_thread_summarizer/integration/render_lookup_spec.rb --seed 1` |
+| Outcome | Exit code 0; **141 examples, 0 failures, 3 pending** (~1m15s, seed 1). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #97](https://github.com/ejgdr/canvas-lms/pull/97), squash-merged at `92e6d7dde058bab1050a6226ec3509996c324752` |
+| Trace to plan | FR-1 render API contract; completes M3 (#15–#18 + #84). Blocks #95 UI unblocked post-merge. |
+| Board transitions | Closed 2026-05-27T23:11:26Z; Done 2026-05-27T23:12:12Z; QA Pass 2026-05-27T23:12:39Z (item `PVTI_lAHOBQJOSM4BWez_zgt_o0A` / id `192914240`) |
+| Spec-idiom note | `lookup_for_render` specs must use `describe DiscussionThreadSummarizer::SummarizationService` — not nested string-describe — so `described_class::LLM_CONFIG_VERSION` resolves. |
+| Singleton-key note | `enqueue_for` singleton topic-id only; multi-locale requests collapse to one job — handoff to #95 / #21. |
+
+*Last verified (Cycle 19 row): 2026-05-27 against squash-merge `92e6d7dde058bab1050a6226ec3509996c324752`*
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 92e6d7dde058bab1050a6226ec3509996c324752*

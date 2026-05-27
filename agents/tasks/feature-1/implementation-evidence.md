@@ -583,4 +583,43 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011*
+## Cycle 19 — Render-path lookup + GET endpoint (issue #84, M3)
+
+**Pre-implementation prerequisites (completed before branch):**
+
+| Step | Result |
+|---|---|
+| [#84](https://github.com/ejgdr/canvas-lms/issues/84) re-scope | Issue body narrowed to API/lookup layer only: `SummarizationService#lookup_for_render`, `RenderResult` / `RenderState`, `RegenerationRateLimiter.preview`, GET `thread_summary`, six render metrics. React/UI → [#95](https://github.com/ejgdr/canvas-lms/issues/95). Optional index → [#96](https://github.com/ejgdr/canvas-lms/issues/96) backlog. |
+| [#95](https://github.com/ejgdr/canvas-lms/issues/95) filed | `[M4] Thread summary UI` — summary block, stale badge, generating placeholder, polling/refresh, collapse, regenerate, i18n, a11n. Blocked on #84 JSON contract. Reciprocal links in #84 body. |
+| [#96](https://github.com/ejgdr/canvas-lms/issues/96) filed | Backlog optional composite index on `discussion_topic_summaries` for `lookup_for_render` if profiling shows pain. |
+
+**Procedural — design locked at Checkpoint 1:**
+
+- **`RegenerationRateLimiter.preview`** — only Cycle 19 contract change to the Cycle 18-locked class. READ-ONLY probe; mirrors `.check` cooldown-before-quota ordering via `EXISTS` on cooldown key and `GET` on quota counter. No `SET`, `INCR`, `DECR`, or `EXPIRE`. Render path uses `.preview`; job miss path uses `.check` authoritatively; preview-allow / job-deny race is acceptable (one-cycle delay).
+- **`RenderResult` / `RenderState`** — separate from `CacheResult` / `CacheResult.status`. Pipeline enum stays `:hit | :miss | :rate_limited` only. Render enum: `:current`, `:stale`, `:generating`, `:rate_limited_stale`, `:rate_limited_empty`, `:disabled`.
+- **GET endpoint:** `GET /api/v1/courses/:course_id/discussion_topics/:topic_id/thread_summary` on `DiscussionTopicsApiController#thread_summary`. JSON keyed by `RenderState`; `:disabled` → HTTP 200 `{ "status": "disabled", "enabled": false, "enqueued": false }` (not 404).
+- **Stale lookup:** `where(llm_config_version:, parent_id: nil, locale:).order(created_at: :desc).first` — no `dynamic_content_hash` in WHERE; compare row hash to `ContentVersionHash.call(topic)` after fetch.
+- **Hash race acceptance:** `ContentVersionHash.call(topic)` after row fetch; concurrent edits can flip `:current` ↔ `:stale` for one request; self-corrects on next render. Precedent: legacy summary `obsolete` flag at `discussion_topics_api_controller.rb:135` (`find_summary`).
+- **Singleton-key / locale:** `enqueue_for` singleton is `discussion_thread_summarizer:generation_for_topic:#{discussion_topic.id}` — **topic-id only, not locale**. Multi-locale render requests for the same topic collapse to one delayed job; whichever locale wins the race gets the generated row. Observation (not a bug) — matches Cycle 12 `insight_generation` pattern. [#95](https://github.com/ejgdr/canvas-lms/issues/95) and [#21](https://github.com/ejgdr/canvas-lms/issues/21) must handle in UI (locale-specific polling or accepted constraint).
+- **Spec-organization learning:** Use top-level `describe DiscussionThreadSummarizer::SummarizationService, "#lookup_for_render"` when referencing `described_class::LLM_CONFIG_VERSION`. Nesting under string-describe `"#fetch_or_create_summary"` makes `described_class` a String → `TypeError: nil is not a class/module`.
+- **M3 milestone closure:** Cycle 19 closes [#84](https://github.com/ejgdr/canvas-lms/issues/84), the last consumer of M3 cache + invalidation + rate-limit + render-lookup contracts. M3 complete across cycles 15–19 / issues #15, #16, #17, #18, #84.
+
+**Diff overage acknowledgment:** +481 combined lines (impl ~194 + spec ~287). Over raised cap 350 by ~37% (~131 lines). Fourth consecutive cycle over cap (15, 16, 17, 18, 19). Surfaced per surface-don't-absorb convention. Intentional spec coverage: 3 `.preview` + 7 `#lookup_for_render` + 3 controller + 1 integration (`:generating` → enqueue → job → `:current`). **M4 recalibration recommended:** (a) accept cap ~500 with soft 350, or (b) split cycles into impl-only and spec-only PRs.
+
+| Field | Content |
+|---|---|
+| Slice | [#84](https://github.com/ejgdr/canvas-lms/issues/84) — "[M3] Thread render-path API: stale-aware lookup + render states." Branch `feat/m3-render-lookup`. |
+| Classification | Behavior-changing application code — render lookup service, limiter preview, six render metrics, GET API. No React/JS. |
+| Files changed | `regeneration_rate_limiter.rb` (+20 preview); `summarization_service.rb` (+92 RenderResult/RenderState/`lookup_for_render`); `metrics.rb` (+48 six helpers); `discussion_topics_api_controller.rb` (+33 `thread_summary`); `config/routes.rb` (+1); specs (+226 across 4 files). Net **+481**. |
+| Tripwires | No `ContentVersionHash` / `CacheInvalidation` edits; no `.check` / `#fetch_or_create_summary` / `CacheResult` changes; no new flags; no migration; no React; no admin bypass; no audit DB; PR closes **#84 only** (not #95, #96, #85, #23). Diff cap **surfaced** (481 vs 350). |
+| Tests added | 3 `.preview`; 7 `lookup_for_render`; 3 `thread_summary` controller; 1 integration `render_lookup_spec.rb`. |
+| Command | `docker compose run --rm web bin/rspec` on limiter, summarization_service, controller, integration specs |
+| Outcome | Exit code 0; **141 examples, 0 failures, 3 pending** (~1m15s, seed 1). |
+| Pull request | [PR #97](https://github.com/ejgdr/canvas-lms/pull/97) — squash-merged at `92e6d7dde058bab1050a6226ec3509996c324752` on 2026-05-27T23:11:25Z |
+| Board status timeline | Issue closed: 2026-05-27T23:11:26Z (PR #97 `closes #84`); Status → Done: 2026-05-27T23:12:12Z (project item add + explicit field, item `PVTI_lAHOBQJOSM4BWez_zgt_o0A`); QA Status → Pass: 2026-05-27T23:12:39Z (GraphQL update on item `192914240`) |
+
+*Last verified (Cycle 19 row): 2026-05-27 against squash-merge `92e6d7dde058bab1050a6226ec3509996c324752`*
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 92e6d7dde058bab1050a6226ec3509996c324752*
