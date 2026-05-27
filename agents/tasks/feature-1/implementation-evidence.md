@@ -513,4 +513,36 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 1f8256d4682c801efd00365ca89d9e417dd17096*
+## Cycle 17 — Cache invalidation hooks + meaningful-change threshold (issue #17, M3)
+
+**Pre-implementation prerequisites (completed before branch):**
+
+| Step | Result |
+|---|---|
+| [#84](https://github.com/ejgdr/canvas-lms/issues/84) state | Was **Closed** unintentionally after Cycle 16; **reopened** 2026-05-27 (`state_reason: reopened`). Cycle 17 confirmed #84 **Open** at start of cycle. |
+| [#17](https://github.com/ejgdr/canvas-lms/issues/17) re-scope | Issue body updated with unambiguous threshold/rekey language: edits below word-delta threshold rekey without regeneration; creates and soft-deletes always meaningful. |
+
+**Procedural — re-scope summary (Checkpoint 1 approved):**
+
+- **Threshold applies to edits only.** Word delta = `|HtmlTextHelper.strip_tags(after).split.size − HtmlTextHelper.strip_tags(before).split.size|` compared to `Setting.get("discussion_thread_summarizer_meaningful_change_word_threshold", "5").to_i`.
+- **Creates and soft-deletes** (`workflow_state → "deleted"`) are always meaningful regardless of entry size.
+- **5-word threshold** is a tokenizer-free proxy (≈ 7 tokens for English); word count aligns with `DiscussionEntry#message_word_count` precedent.
+- **Mechanism (a) + (e):** meaningful events emit `invalidation.fired` and leave rows as hash orphans (stale-aware lookup contract for #84); below-threshold edits `update_all` rekey `dynamic_content_hash` to post-edit `ContentVersionHash` without regeneration.
+- **[#85](https://github.com/ejgdr/canvas-lms/issues/85)** stays **Backlog** — viewer-agnostic invalidation does not fix cross-viewer wrongness from scope-limited cache keys.
+
+| Field | Content |
+|---|---|
+| Slice | [#17](https://github.com/ejgdr/canvas-lms/issues/17) — "[M3] Cache invalidation hooks + meaningful-change threshold." Branch `feat/m3-invalidation-hooks`. |
+| Classification | Behavior-changing application code — write-side invalidation hooks on `DiscussionEntry`; new `CacheInvalidation` service; two metrics helpers. |
+| Files changed | `app/services/discussion_thread_summarizer/cache_invalidation.rb` (new, 106 lines); `app/models/discussion_entry.rb` (+35 lines hooks); `lib/discussion_thread_summarizer/metrics.rb` (+17 lines); `spec/services/discussion_thread_summarizer/cache_invalidation_spec.rb` (new, 162 lines, 10 examples); `spec/lib/discussion_thread_summarizer/metrics_spec.rb` (+20 lines, 2 examples). Net **+339 / −1** — **surfaces 250-line tripwire overage** (rekey comment + 10 spec examples). |
+| Tripwires | No `ContentVersionHash` edits; no `#fetch_or_create_summary` / cache tuple changes; no new flags; no rate limiting (#18); no render-path / #84 work; no audit DB persistence; no migration. PR closes **#17 only**. |
+| Tests added | 10 cache-invalidation examples (create/edit above/edit below/delete, unrelated touch, flag off, rekey hit, soft-delete path, no client/job on rekey, multi-locale rekey) + 2 metrics examples. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/cache_invalidation_spec.rb spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
+| Outcome | Exit code 0; **18 examples, 0 failures** (8.13 seconds, seed 43247). |
+| Pull request | [PR #89](https://github.com/ejgdr/canvas-lms/pull/89) — squash-merged at `3db30731b6ece2d75408ad331c6ec0a84fac00e4` on 2026-05-27T19:40:49Z |
+| Evidence PR | [PR #90](https://github.com/ejgdr/canvas-lms/pull/90) — pending squash-merge on `docs/cycle-17-evidence-records` |
+| Board status timeline | Todo → Done: 2026-05-27T19:40:51Z (auto-closed by PR #89); QA Status → Pass: 2026-05-27T19:42:19Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9Kc`) |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 3db30731b6ece2d75408ad331c6ec0a84fac00e4*
