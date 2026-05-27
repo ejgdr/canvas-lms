@@ -352,4 +352,52 @@ The fourth AC ("increment metric") was honoured in this slice rather than deferr
 **Trace to plan.** This slice executes the M2 schema validation story in `agents/tasks/feature-1/implementation-research.md` §6.1 (FR-8: graceful degradation; NFR-5: reliability). With `OutputSchemaValidator` on `master`, the full pipeline from `gather` through `validate` is now real end-to-end: any malformed model response raises before reaching the caller, emits a metric, and is never written to cache. Issue #13 (unit tests for the full pipeline) and issue #14 (integration test) can now be written against a complete service.
 
 ---
-*Last verified: 2026-05-26 against commit 32b38f84a55d*
+
+## Cycle 11 — Audit log emission (M2 Summarization service)
+
+**Slice.** Add a per-generation-attempt audit log record to `SummarizationService#summarize`. Every call — successful or not — emits exactly one structured JSON line via `Rails.logger.info`. Fields captured: `event`, `thread_id`, `scope_mode`, `model_identifier`, `request_byte_size`, `latency_ms`, `success`, `error_category`. Raw payload and author names are never logged. Two private helpers added: `emit_audit_log(**fields)` (the emitter) and `error_category_for(exception)` (maps exception type to category string).
+
+**Issue.** [#12](https://github.com/ejgdr/canvas-lms/issues/12) — "[M2] Audit log emission: LLMResponse-style record per generation attempt." Linked to NFR-2 (observability) in `agents/tasks/feature-1/implementation-research.md`. Blocked by #6, #9, #10 — all resolved.
+
+**Issue #12 body — verbatim acceptance criteria driving key decisions:**
+> "Every generation attempt, regardless of outcome, produces exactly one audit record."
+> "A failed generation attempt produces one record with success: false."
+> "The record must not contain raw model response text or raw post content."
+> "Fields: thread_id, scope_mode, model_identifier, byte_size, latency_ms, success/failure."
+> "The feature-flag-off path need not produce an audit record (service never called)."
+
+**Key design decision — LLMResponse rejected as audit store.** Three blocking schema constraints make `LLMResponse` unsuitable without a migration (forbidden by scope cap):
+1. `associated_assignment` FK with `null: false` — no assignment exists in a discussion thread context.
+2. `raw_response` with `null: false` — conflicts directly with AC #3 (no raw response text).
+3. `user` FK with `null: false` — semantically wrong for a service-level audit where the "actor" is the service, not a specific user.
+Conclusion: "LLMResponse-style" in the issue title was interpreted as field-shape and contract (structured metadata, one record per attempt, success/failure outcome), not literal row persistence. DB persistence is deferred to a future slice when a discussion-summarizer-specific audit table can be designed without the above constraints. `DiscussionTopicInsight` was also evaluated and rejected — it models workflow state (cached result), not generation-attempt audit.
+
+**Key design decision — `Process.clock_gettime(Process::CLOCK_MONOTONIC)` over `Benchmark.measure#real`.**
+Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service.rb:236`. The monotonic clock is immune to wall-clock adjustments (NTP steps, leap seconds, DST transitions). This matters operationally because `latency_ms` is consumed downstream by alerting thresholds — a wall-clock step during a summarize call would produce a false-positive threshold breach or an implausibly negative latency. Monotonic eliminates that class of ops incident.
+
+**Key design decision — Option A (`$!` global) for success-state detection.**
+`outcome = "success"` initialization with explicit mutation on rescue branches is incorrect for unanticipated exceptions: the exception propagates past both rescues, `ensure` runs, and `$!` is nil only on the success path. Using `propagating = $!` in the `ensure` block reads the truth from the VM directly — nil on success, the exception object on any failure path. The `error_category_for` helper then maps exception type to category string in one place. The existing `rescue SchemaViolationError` branch is preserved for its own responsibility (emit the Metrics counter) and no longer mutates audit state. An unexpected `StandardError` correctly produces `success: false, error_category: "unknown"`.
+
+**Audit log strategy — log-line over DB row.** `Rails.logger.info` with a JSON-encoded hash is durable (log rotation + aggregation infrastructure is already in place for Canvas production) and requires no schema changes. Each log line is a flat JSON object easily parsed by Datadog/Splunk. AC #1 ("exactly one record per attempt") is satisfied by the `ensure` block which runs once per invocation. Future slice: if DB persistence is needed (e.g. for admin reporting), a discussion-summarizer-specific table with correct nullable FKs can be added and the `emit_audit_log` emitter updated to call `create!` in addition to (or instead of) the log line.
+
+**Pull request.** [#70](https://github.com/ejgdr/canvas-lms/pull/70) — `[M2] Audit log emission per generation attempt (closes #12)`. Two files changed, 129 insertions, 9 deletions:
+
+- `app/services/discussion_thread_summarizer/summarization_service.rb` (modified) — `summarize` restructured: `t0` captured before client call, `ensure` block added with `emit_audit_log` using `$!` for success detection. Two new private methods: `emit_audit_log(**fields)` and `error_category_for(exception)`. `rescue DiscussionThreadSummarizer::SchemaViolationError` preserved for Metrics emission.
+- `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified) — shared `before` block gains `DiscussionThreadSummarizer::OutputSchemaValidator` autoload trigger (prevents `NameError` on `SchemaViolationError` when the audit-log context runs first) and `allow(Rails.logger).to receive(:info)` suppressor. Adds `context "audit log emission"` with 6 examples (see below). `let(:malformed_client)` hoisted to outer describe scope so both `schema validation` and `audit log emission` contexts can share it.
+
+**Board status timeline.**
+
+| Timestamp (UTC) | Transition | Source |
+|---|---|---|
+| 2026-05-27T01:48:00Z | In Progress | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9Hw` |
+| 2026-05-27T01:50:00Z | Done | PR #70 auto-close |
+| 2026-05-27T01:50:00Z | QA Status → Pass | GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9Hw` |
+
+**Merge evidence.** PR #70 was squash-merged into `master` at commit `f10558c656d7`. Issue #12 closed by PR body.
+
+**Local verification.** Command: `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation`. Exit code 0, **18 examples, 0 failures** (1.17 seconds, seed 47643). First run had 1 failure (autoload race — `SchemaViolationError` not yet loaded when `raise_error(SchemaViolationError)` argument evaluated); fixed by adding `DiscussionThreadSummarizer::OutputSchemaValidator` to shared `before`. Second run: 18/18. Full record in `agents/tasks/feature-1/qa-lab-evidence.md` Cycle 11.
+
+**Trace to plan.** This slice satisfies NFR-2 (observability: every outbound call is logged with thread id, byte size, scope mode, model identifier, and latency; raw payloads are not logged) from `agents/tasks/feature-1/implementation-research.md` §1.2. The `ensure`-based emission guarantees AC #1 regardless of pipeline outcome. AC #5 (flag-off path need not produce record) is already satisfied: the service is never called when the feature flag is off (caller responsibility), so `ensure` never runs.
+
+---
+*Last verified: 2026-05-27 against commit f10558c656d7*
