@@ -260,4 +260,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge dfa1bd32b0406005cb2086d161e7e96e44d16121*
+---
+
+## Cycle 16 — Cache read/write in summarization pipeline (issue #16, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#16](https://github.com/ejgdr/canvas-lms/issues/16) — pipeline-only cache read/write (render-path ACs in [#84](https://github.com/ejgdr/canvas-lms/issues/84)). |
+| Tests added or updated | 9 DB-backed examples in `describe "DiscussionThreadSummarizer::SummarizationService#fetch_or_create_summary"` (hit, miss, miss-then-hit, two-topic isolation, locale-distinct, hash equality, result parity, cache.hit, cache.miss); integration example 3 asserts one `DiscussionTopicSummary` with expected hash after `run_jobs`. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb --format documentation` |
+| Outcome | Exit code 0; **38 examples, 0 failures** (13.63 seconds, seed 60703). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #86](https://github.com/ejgdr/canvas-lms/pull/86), squash-merged at `1f8256d4682c801efd00365ca89d9e417dd17096` |
+| Notes | 4-tuple WHERE (locale separate from hash). scope_limited backlog [#85](https://github.com/ejgdr/canvas-lms/issues/85). `#summarize` public convergence deferred. |
+| Board transitions | Done 2026-05-27T18:18:04Z; QA Pass 2026-05-27T18:19:19Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9J8`) |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 1f8256d4682c801efd00365ca89d9e417dd17096*
