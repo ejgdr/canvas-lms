@@ -33,6 +33,14 @@ describe DiscussionThreadSummarizer::SummarizationService do
     end.new
   end
 
+  let(:transport_client) do
+    Class.new(DiscussionThreadSummarizer::ModelClient) do
+      def summarize(_payload)
+        raise DiscussionThreadSummarizer::TransportError, "connection refused"
+      end
+    end.new
+  end
+
   # Default gather-chain stubs: default mode, no entries.
   # Keeps the four pre-existing #summarize examples working unchanged.
   before do
@@ -176,14 +184,6 @@ describe DiscussionThreadSummarizer::SummarizationService do
 
     def audit_log
       JSON.parse(logged_payloads.last, symbolize_names: true)
-    end
-
-    let(:transport_client) do
-      Class.new(DiscussionThreadSummarizer::ModelClient) do
-        def summarize(_payload)
-          raise DiscussionThreadSummarizer::TransportError, "connection refused"
-        end
-      end.new
     end
 
     let(:broken_client) do
@@ -349,6 +349,115 @@ describe DiscussionThreadSummarizer::SummarizationService do
     it "ordering is applied before filtering: order(:created_at) is called on the relation" do
       expect(entries_relation).to receive(:order).with(:created_at).and_return(entries_relation)
       service.send(:gather, topic, viewer)
+    end
+  end
+
+  # ── Cross-cutting pipeline seams (Cycle 13) ──────────────────────────────
+  # These examples exercise the seams where gather / pseudonymize / validate /
+  # audit-log / metric-emit interact within a single summarize call.
+  # Individual unit behaviour is already covered by the contexts above.
+
+  context "cross-cutting pipeline seams" do
+    # Lightweight entry builder matching the shape gather() produces.
+    def make_entry(user_id:, name:, message:)
+      user = instance_double("User", short_name: name)
+      instance_double("DiscussionEntry", user_id:, user:, message:)
+    end
+
+    let(:student_entry)  { make_entry(user_id: 1,  name: "Alice",   message: "student post")  }
+    let(:teacher_entry)  { make_entry(user_id: 3,  name: "Teacher", message: "teacher post")  }
+    let(:viewer_entry)   { make_entry(user_id: 99, name: "Viewer",  message: "viewer post")   }
+
+    # A client that captures its payload and returns a valid shape.
+    let(:capturing_client) do
+      Class.new(DiscussionThreadSummarizer::ModelClient) do
+        attr_reader :received_payloads
+
+        def initialize
+          @received_payloads = []
+        end
+
+        def summarize(payload)
+          @received_payloads << payload
+          { themes: ["t"], viewpoints: [], open_questions: [], scope_mode: payload[:scope_mode] }
+        end
+      end.new
+    end
+
+    let(:logged_payloads) { [] }
+
+    before do
+      allow(Rails.logger).to receive(:info) { |msg| logged_payloads << msg }
+    end
+
+    def last_audit_log
+      JSON.parse(logged_payloads.last, symbolize_names: true)
+    end
+
+    it "scope-limited: filter → pseudonymize → validate all fire; client sees only teacher+viewer with pseudonyms" do
+      allow(root_account).to receive(:feature_enabled?)
+        .with(:discussion_thread_summarizer_scope_limited).and_return(true)
+      allow(entries_relation).to receive(:to_a)
+        .and_return([student_entry, teacher_entry, viewer_entry])
+      allow(topic).to receive(:discussion_entries).and_return(entries_relation)
+      # Stub instructor_user_ids on the service instance that will be created.
+      svc = described_class.new(client: capturing_client)
+      allow(svc).to receive(:instructor_user_ids).and_return(Set[3])
+
+      svc.summarize(discussion_topic: topic, viewer:)
+
+      payload = capturing_client.received_payloads.last
+      names   = payload[:entries].map { |e| e[:author_name] }
+
+      # Scope filter: Alice (user_id 1) excluded; teacher + viewer included.
+      expect(names.size).to eq(2)
+      # Pseudonymize: no real names reach the client.
+      expect(names).not_to include("Alice", "Teacher", "Viewer")
+      expect(names).to all(match(/\AAuthor [A-Z]+\z/))
+      # Audit log fires with success.
+      expect(last_audit_log[:success]).to be(true)
+      expect(last_audit_log[:scope_mode]).to eq("limited")
+    end
+
+    it "scope-limited + malformed client: Metrics.increment_failure and audit log both fire in the same call" do
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_failure)
+      allow(root_account).to receive(:feature_enabled?)
+        .with(:discussion_thread_summarizer_scope_limited).and_return(true)
+      allow(entries_relation).to receive(:to_a)
+        .and_return([student_entry, teacher_entry, viewer_entry])
+      svc = described_class.new(client: malformed_client)
+      allow(svc).to receive(:instructor_user_ids).and_return(Set[3])
+
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::SchemaViolationError)
+
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_failure)
+        .with(reason: "schema_invalid", account: root_account)
+      expect(last_audit_log[:success]).to be(false)
+      expect(last_audit_log[:error_category]).to eq("schema_invalid")
+    end
+
+    it "transport error: Metrics.increment_failure is NOT emitted (only schema violations trigger it)" do
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_failure)
+      svc = described_class.new(client: transport_client)
+
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::TransportError)
+
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_failure)
+    end
+
+    it "idempotence: repeated summarize calls with identical inputs send identical payloads to the client" do
+      allow(entries_relation).to receive(:to_a)
+        .and_return([student_entry, teacher_entry])
+      svc = described_class.new(client: capturing_client)
+
+      svc.summarize(discussion_topic: topic, viewer:)
+      svc.summarize(discussion_topic: topic, viewer:)
+
+      expect(capturing_client.received_payloads.size).to eq(2)
+      expect(capturing_client.received_payloads.first)
+        .to eq(capturing_client.received_payloads.last)
     end
   end
 end
