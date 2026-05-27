@@ -63,7 +63,7 @@ describe DiscussionThreadSummarizer::SummarizationService do
   # ── Async enqueueing via .enqueue_for (Cycle 12) ─────────────────────────
 
   describe ".enqueue_for" do
-    let(:delay_proxy) { instance_double(described_class, summarize: nil) }
+    let(:delay_proxy) { instance_double(described_class, fetch_or_create_summary: nil) }
 
     it "dispatches with HIGH_PRIORITY, singleton scoped to the topic id, and n_strand with region" do
       expected_singleton = "discussion_thread_summarizer:generation_for_topic:42"
@@ -80,9 +80,9 @@ describe DiscussionThreadSummarizer::SummarizationService do
       described_class.enqueue_for(discussion_topic: topic, viewer:)
     end
 
-    it "chains #summarize on the delay proxy with the correct discussion_topic and viewer kwargs" do
+    it "chains #fetch_or_create_summary on the delay proxy with the correct discussion_topic and viewer kwargs" do
       expect_any_instance_of(described_class).to receive(:delay).and_return(delay_proxy)
-      expect(delay_proxy).to receive(:summarize).with(discussion_topic: topic, viewer:)
+      expect(delay_proxy).to receive(:fetch_or_create_summary).with(discussion_topic: topic, viewer:)
 
       described_class.enqueue_for(discussion_topic: topic, viewer:)
     end
@@ -459,5 +459,128 @@ describe DiscussionThreadSummarizer::SummarizationService do
       expect(capturing_client.received_payloads.first)
         .to eq(capturing_client.received_payloads.last)
     end
+  end
+
+end
+
+# DB-backed cache tests (Cycle 16, #16) — separate describe to avoid instance_double stubs.
+describe "DiscussionThreadSummarizer::SummarizationService#fetch_or_create_summary" do
+  let(:course)         { course_model }
+  let(:user)           { user_model }
+  let(:topic)          { course.discussion_topics.create! }
+  let(:viewer)         { user }
+  let(:locale)         { "en" }
+  let(:stub_client)    { DiscussionThreadSummarizer::StubModelClient.new }
+  let(:service)        { DiscussionThreadSummarizer::SummarizationService.new(client: stub_client) }
+  let(:content_hash)   { DiscussionThreadSummarizer::ContentVersionHash.call(topic) }
+
+  before do
+    topic.discussion_entries.create!(user:, message: "hello")
+    allow(Rails.logger).to receive(:info)
+  end
+
+  def seed_summary(locale: "en", hash: content_hash, summary_json: nil)
+    topic.summaries.create!(
+      user:,
+      locale:,
+      summary: summary_json || DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+      dynamic_content_hash: hash,
+      llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+    )
+  end
+
+  it "returns :hit without calling the model client when a matching row exists" do
+    seed_summary
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    result = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(result.status).to eq(:hit)
+    expect(stub_client).not_to have_received(:summarize)
+  end
+
+  it "returns :miss, calls the client once, and creates one DiscussionTopicSummary" do
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    expect do
+      result = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+      expect(result.status).to eq(:miss)
+    end.to change { topic.summaries.count }.by(1)
+
+    expect(stub_client).to have_received(:summarize).once
+  end
+
+  it "miss-then-hit calls the model client only once" do
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(stub_client).to have_received(:summarize).once
+  end
+
+  it "isolates cache rows per discussion topic" do
+    topic_b = course.discussion_topics.create!
+    topic_b.discussion_entries.create!(user:, message: "other thread")
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+    service.fetch_or_create_summary(discussion_topic: topic_b, viewer:, locale:)
+
+    expect(topic.summaries.count).to eq(1)
+    expect(topic_b.summaries.count).to eq(1)
+    expect(stub_client).to have_received(:summarize).twice
+  end
+
+  it "stores separate rows per locale for the same topic content" do
+    seed_summary(locale: "en")
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale: "es")
+
+    expect(topic.summaries.pluck(:locale)).to contain_exactly("en", "es")
+    expect(stub_client).to have_received(:summarize).once
+  end
+
+  it "persists dynamic_content_hash equal to ContentVersionHash.call(topic)" do
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(topic.summaries.last.dynamic_content_hash).to eq(content_hash)
+  end
+
+  it "returns identical :result on miss-then-hit (parsed DB JSON matches pipeline output)" do
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    miss = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+    hit  = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(hit.result).to eq(miss.result)
+    expect(hit.result).to eq(DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE)
+  end
+
+  it "emits cache.hit when serving a cached summary" do
+    seed_summary
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_hit)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_miss)
+
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_cache_hit)
+      .with(account: course.root_account)
+    expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_cache_miss)
+  end
+
+  it "emits cache.miss when no cached summary exists" do
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_miss)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_hit)
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_cache_miss)
+      .with(account: course.root_account)
+    expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_cache_hit)
   end
 end
