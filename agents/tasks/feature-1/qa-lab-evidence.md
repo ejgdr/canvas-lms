@@ -194,4 +194,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against commit f10558c656d7*
+## Cycle 12 — Async summarization background job (issue #11, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#11](https://github.com/ejgdr/canvas-lms/issues/11) — "[M2] Async summarization background job (delay with singleton + n_strand)." Branch `feat/m2-async-summarization-job`. |
+| Classification | Behavior-changing application code — `SummarizationService.enqueue_for` introduces a new public class method that exercises `Delayed::HIGH_PRIORITY`, a topic-scoped singleton key, and an n_strand region key. All four new spec examples are directly behaviour-covering. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified, +4 examples in `describe ".enqueue_for"`): (1) Dispatches with `HIGH_PRIORITY`, singleton `"discussion_thread_summarizer:generation_for_topic:42"`, n_strand containing the region; (2) chains `.summarize` on the delay proxy with `discussion_topic:` and `viewer:` kwargs; (3) singleton key encodes `topic.id` (same topic → same key); (4) distinct topic ids → distinct singleton keys. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; `22 examples, 0 failures` (finished in 1.39 seconds, seed 44441) |
+| `QA Status` | `Pass` |
+| PR / commit | commit `ec96dae82ea` on branch `feat/m2-async-summarization-job` |
+| Trace to plan | FR-1 (generate on demand, not blocking the request) — `enqueue_for` is the async dispatch point. The singleton key per `discussion_topic.id` prevents duplicate jobs for the same thread, satisfying the concurrency-safety requirement. `HIGH_PRIORITY` matches the `insight_generation` precedent, keeping summary jobs in the same queue tier as insight generation. |
+
+---
+
+*Last verified: 2026-05-27 against commit ec96dae82ea*

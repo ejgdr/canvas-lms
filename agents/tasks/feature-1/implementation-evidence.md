@@ -400,4 +400,24 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 **Trace to plan.** This slice satisfies NFR-2 (observability: every outbound call is logged with thread id, byte size, scope mode, model identifier, and latency; raw payloads are not logged) from `agents/tasks/feature-1/implementation-research.md` §1.2. The `ensure`-based emission guarantees AC #1 regardless of pipeline outcome. AC #5 (flag-off path need not produce record) is already satisfied: the service is never called when the feature flag is off (caller responsibility), so `ensure` never runs.
 
 ---
-*Last verified: 2026-05-27 against commit f10558c656d7*
+## Cycle 12 — Async summarization background job (issue #11, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#11](https://github.com/ejgdr/canvas-lms/issues/11) — "[M2] Async summarization background job (delay with singleton + n_strand)." Branch `feat/m2-async-summarization-job`. |
+| Classification | Behavior-changing application code — `SummarizationService.enqueue_for` is a new public class method that schedules `#summarize` via Delayed Job with singleton + n_strand keys. Four new spec examples exercise the dispatch contract. |
+| Files changed | `app/services/discussion_thread_summarizer/summarization_service.rb` (+12 lines, additive only); `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (+57 lines, new `.enqueue_for` describe block). No new files. |
+| Async entrypoint | `SummarizationService.enqueue_for(discussion_topic:, viewer:)` — class method on `SummarizationService`. Constructs an instance via `new` and calls `.delay(...).summarize(...)`, mirroring the `insight_generation` pattern at `discussion_topics_api_controller.rb:372–377`. |
+| Delayed Job options | `priority: Delayed::HIGH_PRIORITY` (matches precedent); `singleton: "discussion_thread_summarizer:generation_for_topic:#{discussion_topic.id}"`; `n_strand: ["discussion_thread_summarizer:generation:#{Shard.current.database_server.region}", 1]`. |
+| handle_asynchronously vs delay decision | `delay` on instance chosen. `handle_asynchronously` is for always-async methods (MaterializedView pattern); `delay` is for caller-chosen async dispatch (controller pattern). Our `enqueue_for` is the explicit async entry point — `delay` is correct. |
+| Delayed Job spec convention | `expect_any_instance_of(described_class).to receive(:delay).with(hash_including(...)).and_return(proxy)` — set expectation before action, consistent with `discussion_topics_api_controller_spec.rb:824`. Block-form `allow_any_instance_of` used for key-capture examples. |
+| Shard.current.database_server.region | Evaluated at enqueue time in tests; value is `nil` or an empty string in the test environment. Singleton key and n_strand string are constructed dynamically in both production and specs, matching the precedent. No stubbing needed. |
+| Extract decision | Inline. The class method is 5 lines, well within the 30-line threshold. |
+| Tests added | 4 examples in new `describe ".enqueue_for"` block: (1) dispatches with HIGH_PRIORITY, correct singleton, correct n_strand; (2) chains #summarize on the proxy with correct kwargs; (3) singleton key includes topic id (same topic → same key); (4) distinct topics → distinct keys. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; **22 examples, 0 failures** (finished in 1.39 seconds, seed 44441). First run: all green. |
+| Commit | `ec96dae82ea` on branch `feat/m2-async-summarization-job`. |
+
+---
+
+*Last verified: 2026-05-27 against commit ec96dae82ea*
