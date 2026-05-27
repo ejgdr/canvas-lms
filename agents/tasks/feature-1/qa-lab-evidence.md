@@ -226,4 +226,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 756c7d4422c7f7b49585c318282d47c564a6d7c8*
+## Cycle 14 — Async pipeline integration tests (issue #14, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#14](https://github.com/ejgdr/canvas-lms/issues/14) — "[M2] Integration test: background job enqueues on thread open and produces valid output." Branch `test/m2-async-integration`. |
+| Classification | Behavior-changing (spec-only) — new spec file with 3 integration examples using real AR fixtures. No production code changes. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb` (new, 3 examples): (1) `enqueue_for` creates exactly one Delayed::Job with correct singleton key; (2) second `enqueue_for` for same topic is a no-op — real DB singleton dedup; (3) job runs end-to-end: audit log `success: true`, `Metrics.increment_failure` not called. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb --format documentation` |
+| Outcome | Exit code 0; `3 examples, 0 failures` (14.23 seconds, seed 16860). First run: 1 failure (Delayed::Worker non-JSON log line captured as last entry). Fixed by filtering for `"generation_attempt"`. Second run: 3/3. |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #78](https://github.com/ejgdr/canvas-lms/pull/78), squash-merged at `3464a8953cb1002113c6145b01c640740bf25797` |
+| Trace to plan | FR-1 (generate on demand) — the integration test is the living proof that the M2 async pipeline is end-to-end functional: enqueue_for → Delayed Job → SummarizationService#summarize → StubModelClient → audit log. AC2 (DiscussionTopicSummary record) deferred to M3 slice #16. |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 3464a8953cb1002113c6145b01c640740bf25797*
