@@ -210,4 +210,19 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 5d71ab9c955ecd407470cfcf9b2f83f94ed850f6*
+## Cycle 13 — Cross-cutting pipeline seam unit tests (issue #13, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#13](https://github.com/ejgdr/canvas-lms/issues/13) — "[M2] Unit tests: summarization service (pseudonymization, scope filter, schema validation, ...)." Branch `test/m2-summarization-service-consolidation-unit-tests`. |
+| Classification | Behavior-changing (spec-only) — 4 new examples directly covering cross-cutting seam behaviors. `transport_client` hoisted from inner context to outer scope. No production code changes. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified, +4 examples in `context "cross-cutting pipeline seams"`): (1) Scope-limited filter + pseudonymize + validate fire together in one `summarize` call; client receives only teacher+viewer entries with pseudonymized names. (2) Scope-limited + malformed client: `Metrics.increment_failure` and audit `success: false, error_category: "schema_invalid"` both fire in same call. (3) Transport error: `Metrics.increment_failure` NOT emitted — first explicit negative assertion for this path. (4) Idempotence: repeated `summarize` calls with identical inputs produce identical payloads to client. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; `26 examples, 0 failures` (finished in 1.35 seconds, seed 30855). First run: all green. |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #75](https://github.com/ejgdr/canvas-lms/pull/75), squash-merged at `756c7d4422c7f7b49585c318282d47c564a6d7c8` |
+| Trace to plan | FR-1 (generate on demand) and FR-5 (scope-limited mode) — the seam tests are the living regression guard for the combined filter → pseudonymize → validate path. AC3 cache-write tail and AC4 deferred to M3 (slice #16); no production code required for the 4 examples added here. |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 756c7d4422c7f7b49585c318282d47c564a6d7c8*
