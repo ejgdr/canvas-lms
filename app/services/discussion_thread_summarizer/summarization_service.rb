@@ -25,6 +25,10 @@ module DiscussionThreadSummarizer
   # This is the only code path that calls the model client. Controllers, jobs,
   # and cache layers all go through here, never through the client directly.
   class SummarizationService
+    LLM_CONFIG_VERSION = "thread-summarizer-v1"
+
+    CacheResult = Struct.new(:status, :record, :result, keyword_init: true)
+
     # Enqueues a background summary attempt via Delayed Job.
     # Mirrors the insight_generation pattern in DiscussionTopicsApiController.
     # Singleton + n_strand ensure at most one job per topic runs at a time.
@@ -33,11 +37,39 @@ module DiscussionThreadSummarizer
         priority: Delayed::HIGH_PRIORITY,
         singleton: "discussion_thread_summarizer:generation_for_topic:#{discussion_topic.id}",
         n_strand: ["discussion_thread_summarizer:generation:#{Shard.current.database_server.region}", 1]
-      ).summarize(discussion_topic:, viewer:)
+      ).fetch_or_create_summary(discussion_topic:, viewer:)
     end
 
     def initialize(client: StubModelClient.new)
       @client = client
+    end
+
+    # Cache-aware entrypoint: O(1) lookup by content hash + config version + locale.
+    # On hit, returns stored summary without calling the model client.
+    def fetch_or_create_summary(discussion_topic:, viewer:, locale: I18n.locale.to_s)
+      account      = discussion_topic.context.root_account
+      content_hash = ContentVersionHash.call(discussion_topic)
+      cached       = find_cached_summary(discussion_topic, content_hash, locale)
+
+      if cached
+        DiscussionThreadSummarizer::Metrics.increment_cache_hit(account:)
+        return CacheResult.new(
+          status: :hit,
+          record: cached,
+          result: parse_summary_record(cached)
+        )
+      end
+
+      DiscussionThreadSummarizer::Metrics.increment_cache_miss(account:)
+      result = summarize(discussion_topic:, viewer:)
+      record = persist_summary_record(
+        discussion_topic:,
+        viewer:,
+        locale:,
+        content_hash:,
+        result:
+      )
+      CacheResult.new(status: :miss, record: record, result: result)
     end
 
     def summarize(discussion_topic:, viewer:)
@@ -70,6 +102,39 @@ module DiscussionThreadSummarizer
     end
 
     private
+
+    def find_cached_summary(discussion_topic, content_hash, locale)
+      # NOTE: Cache key assumes discussion_thread_summarizer_scope_limited is OFF.
+      # When enabled, gather filters entries by viewer while ContentVersionHash hashes
+      # the unfiltered .active set, so this key can return cross-viewer wrong results.
+      # Before enabling scope_limited in production, add scope_mode to the cache key
+      # or include viewer-filtered entry IDs in the hash. Tracked in
+      # https://github.com/ejgdr/canvas-lms/issues/85.
+      discussion_topic.summaries
+                      .where(
+                        llm_config_version: LLM_CONFIG_VERSION,
+                        dynamic_content_hash: content_hash,
+                        parent_id: nil,
+                        locale:
+                      )
+                      .order(created_at: :desc)
+                      .first
+    end
+
+    def persist_summary_record(discussion_topic:, viewer:, locale:, content_hash:, result:)
+      discussion_topic.summaries.create!(
+        llm_config_version: LLM_CONFIG_VERSION,
+        dynamic_content_hash: content_hash,
+        user: viewer,
+        locale:,
+        summary: result.to_json,
+        parent_id: nil
+      )
+    end
+
+    def parse_summary_record(record)
+      JSON.parse(record.summary, symbolize_names: true)
+    end
 
     def gather(discussion_topic, viewer)
       course        = discussion_topic.context

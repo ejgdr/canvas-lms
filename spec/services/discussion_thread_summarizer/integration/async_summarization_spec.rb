@@ -22,9 +22,8 @@
 # Uses real AR fixtures (Course, DiscussionTopic, DiscussionEntry, User) and
 # drives Delayed Job through its real execution path via run_jobs/run_job.
 #
-# Scope: M2 async pipeline only.
-# AC2 (DiscussionTopicSummary record with dynamic_content_hash) is deferred to
-# M3 (slice #16): the service does not yet write cache records.
+# Scope: M2 async pipeline + M3 cache write (Cycle 16).
+# AC2: after run_jobs, one DiscussionTopicSummary row with expected dynamic_content_hash.
 # "Thread open" is simulated by direct enqueue_for calls — controller wiring
 # is M4 work.
 
@@ -109,5 +108,12 @@ describe "DiscussionThreadSummarizer::SummarizationService async integration" do
     expect(audit[:thread_id]).to eq(topic.id)
 
     expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_failure)
+
+    expected_hash = DiscussionThreadSummarizer::ContentVersionHash.call(topic)
+    summaries = DiscussionTopicSummary.where(discussion_topic: topic)
+    expect(summaries.count).to eq(1)
+    expect(summaries.first.dynamic_content_hash).to eq(expected_hash)
+    expect(summaries.first.llm_config_version)
+      .to eq(DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION)
   end
 end
