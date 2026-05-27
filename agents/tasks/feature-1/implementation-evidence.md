@@ -442,4 +442,23 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 756c7d4422c7f7b49585c318282d47c564a6d7c8*
+## Cycle 14 — Async pipeline integration tests (issue #14, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#14](https://github.com/ejgdr/canvas-lms/issues/14) — "[M2] Integration test: background job enqueues on thread open and produces valid output." Branch `test/m2-async-integration`. |
+| Classification | Behavior-changing (spec-only) — new spec file with 3 integration examples using real AR fixtures and Delayed::Testing. No production code changes. |
+| Files added | `spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb` (113 lines, new file). |
+| Precedent | `spec/services/accessibility/integration/bulk_close_issues_service_spec.rb` — service-level integration spec in an `integration/` subdirectory using real AR + `run_jobs`. |
+| Reading A vs B | Reading A: "thread open" simulated by direct `enqueue_for` call; no controller wiring. Controller trigger is M4 scope. |
+| AC2 tripwire | `DiscussionTopicSummary` record with `dynamic_content_hash` — service does not yet write cache records; deferred to M3 slice #16. |
+| AC4 | No real HTTP calls — structural via `StubModelClient.new` (default `@client`). |
+| Delayed Job helpers | `Delayed::Job.where(singleton: key).count` for queue-state assertions; `run_jobs` (→ `Delayed::Testing.drain`) for execution. |
+| Tests added | 3 examples: (1) `enqueue_for` creates exactly one job with correct singleton key; (2) second `enqueue_for` for same topic is a no-op (real DB singleton dedup); (3) job runs end-to-end: audit log `success: true`, `Metrics.increment_failure` not called. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb --format documentation` |
+| Outcome | Exit code 0; **3 examples, 0 failures** (14.23 seconds, seed 16860). First run: 1 failure — `Delayed::Worker` emits non-JSON `[STAT]` lines through `Rails.logger.info` during job execution; `logged_payloads.last` was one of those, not the audit record. Fix: filter `logged_payloads` for entry containing `"generation_attempt"` string before parsing JSON. Second run: 3/3. |
+| Pull request | [PR #78](https://github.com/ejgdr/canvas-lms/pull/78) — squash-merged at `3464a8953cb1002113c6145b01c640740bf25797` on 2026-05-27T03:19:09Z |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 3464a8953cb1002113c6145b01c640740bf25797*
