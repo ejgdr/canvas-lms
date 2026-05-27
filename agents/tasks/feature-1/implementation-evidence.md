@@ -664,6 +664,7 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Command | `docker compose run --rm web bin/rspec` on metrics, cache_invalidation, summarization_service specs |
 | Outcome | **66 examples, 0 failures** (~21.12 s, seed 1). |
 | Pull request | [PR #100](https://github.com/ejgdr/canvas-lms/pull/100) — squash-merged at `758f583b07e572e165f8f8f66792c83a36956420` on 2026-05-27T23:35:18Z |
+| Evidence PR | [PR #101](https://github.com/ejgdr/canvas-lms/pull/101) — squash-merged at `f09febf6e0e905ef664e998be2abf000d99700c2` on 2026-05-27T23:37:04Z |
 | Board status timeline | Issue closed: 2026-05-27T23:35:20Z; Status → Done: 2026-05-27T23:35:21Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9NY` / `183104726`); QA Pass: 2026-05-27T23:36:03Z |
 
 **M3 milestone:** Cycle 20 closes [#20](https://github.com/ejgdr/canvas-lms/issues/20), the M3 observability close-out. M3 fully complete: cycles 15–20 / issues #15, #16, #17, #18, #84, #20.
