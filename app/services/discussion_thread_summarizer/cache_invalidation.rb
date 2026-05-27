@@ -47,12 +47,14 @@ module DiscussionThreadSummarizer
       return unless enabled?
 
       Metrics.increment_invalidation_fired(cause: "create", account:)
+      Metrics.increment_cache_invalidated(trigger: "reply_create", account:)
     end
 
     def handle_deleted
       return unless enabled?
 
       Metrics.increment_invalidation_fired(cause: "delete", account:)
+      Metrics.increment_cache_invalidated(trigger: "reply_delete", account:)
     end
 
     def handle_updated(message_before:, message_after:)
@@ -64,6 +66,7 @@ module DiscussionThreadSummarizer
         Metrics.increment_invalidation_skipped_below_threshold(account:)
       else
         Metrics.increment_invalidation_fired(cause: "edit", account:)
+        Metrics.increment_cache_invalidated(trigger: "reply_edit", account:)
       end
     end
 

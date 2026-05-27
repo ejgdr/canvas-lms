@@ -475,8 +475,24 @@ describe "DiscussionThreadSummarizer::SummarizationService#fetch_or_create_summa
   let(:content_hash)   { DiscussionThreadSummarizer::ContentVersionHash.call(topic) }
 
   before do
+    course.enable_feature!(:discussion_thread_summarizer)
     topic.discussion_entries.create!(user:, message: "hello")
     allow(Rails.logger).to receive(:info)
+  end
+
+  it "returns :rate_limited without cache or model work when the feature flag is off" do
+    course.disable_feature!(:discussion_thread_summarizer)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_hit)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_miss)
+    allow(stub_client).to receive(:summarize).and_call_original
+
+    result = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+    expect(result.status).to eq(:rate_limited)
+    expect(result.record).to be_nil
+    expect(stub_client).not_to have_received(:summarize)
+    expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_cache_hit)
+    expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_cache_miss)
   end
 
   def seed_summary(locale: "en", hash: content_hash, summary_json: nil)
@@ -693,6 +709,8 @@ describe DiscussionThreadSummarizer::SummarizationService, "#lookup_for_render" 
 
   it "returns :stale and enqueues when the row hash is an orphan" do
     seed_lookup_summary(hash: "0" * 64)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_render_stale)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_stale)
     expect(described_class).to receive(:enqueue_for).with(
       discussion_topic: lookup_topic,
       viewer: lookup_user
@@ -706,6 +724,8 @@ describe DiscussionThreadSummarizer::SummarizationService, "#lookup_for_render" 
 
     expect(result.status).to eq(:stale)
     expect(result.enqueued).to be(true)
+    expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_cache_stale)
+      .with(account: lookup_course.root_account)
   end
 
   it "returns :generating and enqueues when no summary row exists" do
@@ -729,6 +749,8 @@ describe DiscussionThreadSummarizer::SummarizationService, "#lookup_for_render" 
     seed_lookup_summary(hash: "0" * 64)
     cooldown = ["discussion_thread_summarizer", "cooldown", lookup_user.id, lookup_topic.id].cache_key
     allow(Canvas.redis).to receive(:get) { |key| key == cooldown ? "1" : nil }
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_render_rate_limited_stale)
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_stale)
     expect(described_class).not_to receive(:enqueue_for)
 
     result = lookup_service.lookup_for_render(
@@ -739,6 +761,8 @@ describe DiscussionThreadSummarizer::SummarizationService, "#lookup_for_render" 
 
     expect(result.status).to eq(:rate_limited_stale)
     expect(result.enqueued).to be(false)
+    expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_cache_stale)
+      .with(account: lookup_course.root_account)
   end
 
   it "returns :rate_limited_empty without enqueuing when preview denies and no row exists" do

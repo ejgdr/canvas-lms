@@ -66,6 +66,26 @@ describe DiscussionThreadSummarizer::Metrics do
     end
   end
 
+  describe ".increment_cache_stale" do
+    it "emits discussion_thread_summarizer.cache.stale with account_id tag" do
+      described_class.increment_cache_stale(account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.cache.stale",
+        tags: { account_id: 10_000_000_000_001 }
+      )
+    end
+  end
+
+  describe ".increment_cache_invalidated" do
+    it "emits discussion_thread_summarizer.cache.invalidated with account_id and trigger tags" do
+      described_class.increment_cache_invalidated(trigger: "reply_edit", account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.cache.invalidated",
+        tags: { account_id: 10_000_000_000_001, trigger: "reply_edit" }
+      )
+    end
+  end
+
   describe ".increment_failure" do
     it "emits discussion_thread_summarizer.failure with account_id and reason tags" do
       described_class.increment_failure(reason: "timeout", account:)

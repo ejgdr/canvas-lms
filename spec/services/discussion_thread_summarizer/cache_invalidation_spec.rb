@@ -57,9 +57,17 @@ describe DiscussionThreadSummarizer::CacheInvalidation do
     ]
   end
 
+  def invalidated_metric(trigger:)
+    [
+      "discussion_thread_summarizer.cache.invalidated",
+      { tags: { account_id: account.global_id, trigger: } }
+    ]
+  end
+
   it "fires invalidation.fired cause create on handle_entry_created" do
     described_class.handle_entry_created(entry)
     expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(*fired_metric(cause: "create"))
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(*invalidated_metric(trigger: "reply_create"))
     expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with(*skipped_metric)
   end
 
@@ -88,6 +96,7 @@ describe DiscussionThreadSummarizer::CacheInvalidation do
   it "fires invalidation.fired cause delete on handle_entry_deleted" do
     described_class.handle_entry_deleted(entry)
     expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(*fired_metric(cause: "delete"))
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(*invalidated_metric(trigger: "reply_delete"))
   end
 
   it "does not route editor_id-only saves through invalidation handlers" do
