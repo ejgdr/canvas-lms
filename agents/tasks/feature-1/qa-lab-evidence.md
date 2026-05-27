@@ -335,4 +335,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 92e6d7dde058bab1050a6226ec3509996c324752*
+## Cycle 20 — Cache observability metrics (issue #20, M3 close-out)
+
+| Field | Content |
+|---|---|
+| Slice | [#20](https://github.com/ejgdr/canvas-lms/issues/20) — M3 observability gap-fill. Branch `feat/m3-cache-observability`. |
+| Tests added or updated | `metrics_spec.rb` (+2): `cache.stale`, `cache.invalidated`. `summarization_service_spec.rb` (+3): flag-off pipeline gate; lookup `:stale` / `:rate_limited_stale` → `cache.stale`. `cache_invalidation_spec.rb` (+2): `reply_create`, `reply_delete` triggers. |
+| Command | `docker compose run --rm web bin/rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb spec/services/discussion_thread_summarizer/cache_invalidation_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb --seed 1` |
+| Outcome | **66 examples, 0 failures** (~21.12 s, seed 1). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #100](https://github.com/ejgdr/canvas-lms/pull/100), squash-merged at `758f583b07e572e165f8f8f66792c83a36956420` |
+| Board transitions | Closed 2026-05-27T23:35:20Z; Done 2026-05-27T23:35:21Z; QA Pass 2026-05-27T23:36:03Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9NY`) |
+| Flag-gate note | Returns `:rate_limited` without limiter/metrics when flag off — documented in implementation evidence (no enum extension). |
+
+*Last verified (Cycle 20 row): 2026-05-27 against squash-merge `758f583b07e572e165f8f8f66792c83a36956420`*
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 758f583b07e572e165f8f8f66792c83a36956420*

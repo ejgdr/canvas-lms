@@ -623,4 +623,53 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 92e6d7dde058bab1050a6226ec3509996c324752*
+## Cycle 20 — Cache observability metrics (issue #20, M3 close-out)
+
+**Pre-implementation prerequisites (completed before branch):**
+
+| Step | Result |
+|---|---|
+| [#20](https://github.com/ejgdr/canvas-lms/issues/20) re-scope | Gap-fill close-out: AC `cache_hit`/`cache_miss` → shipped `cache.hit`/`cache.miss`; add `cache.stale` + `cache.invalidated`; flag gate; release note. Stale:fresh ratio → **#50**. Three parallel families documented (`cache.*`, `render.*`, `invalidation.*`). |
+
+**Procedural — Checkpoint 1 decisions (Q1-A, Q2-B, Q3-A, Q4-A, Q5-A):**
+
+- **Q1-A:** AC underscore names document dot-metric emits; no rename of shipped strings.
+- **Q2-B:** `cache.stale` on both `:stale` and `:rate_limited_stale` (both serve orphan-hash content).
+- **Q3-A:** `cache.invalidated` with `trigger:` `reply_*` alongside `invalidation.fired` (`cause:` create/edit/delete).
+- **Q4-A:** Dual-emit — keep `render.stale` / `render.rate_limited_stale`; add `cache.stale` (not a replacement).
+- **Q5-A:** Defense-in-depth flag gate on `#fetch_or_create_summary`.
+
+**Three parallel metric families (intentional, not aliases):**
+
+| Family | Purpose | Examples |
+|--------|---------|----------|
+| `cache.*` | NFR-4 cache effectiveness | `cache.hit`, `cache.miss`, `cache.stale`, `cache.invalidated` |
+| `render.*` | Render-state dashboards (Cycle 19) | `render.current`, `render.stale`, `render.generating`, … |
+| `invalidation.*` | Write-side invalidation (Cycle 17) | `invalidation.fired`, `invalidation.skipped_below_threshold` |
+
+Dual-emit on overlap is intentional (e.g. stale serve → `render.stale` + `cache.stale`; invalidation → `invalidation.fired` + `cache.invalidated`).
+
+**Flag-gate return shape (no `CacheResult.status` extension):**
+
+When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate_limited, record: nil, result: nil)` without calling the limiter, model, or cache/rate-limit metrics. `:rate_limited` is used only as the closest frozen enum value that blocks regeneration — **not** a real rate-limit deny.
+
+**Diff vs cap:** +94 combined (impl ~38 + spec ~53 + doc 3). **Under** 200 soft / 250 hard — first cycle under cap after Cycles 17–19 overages.
+
+| Field | Content |
+|---|---|
+| Slice | [#20](https://github.com/ejgdr/canvas-lms/issues/20) — observability gap-fill. Branch `feat/m3-cache-observability`. |
+| Files changed | `metrics.rb` (+22); `summarization_service.rb` (+13); `cache_invalidation.rb` (+3); `doc/discussion_thread_summarizer_observability.md` (+3); specs (+53). |
+| Tripwires | No renames of shipped metrics; no `ContentVersionHash` / limiter / render API changes; no `CacheResult` enum extension; PR closes **#20 only**. |
+| Tests added | 2 metrics unit + 1 flag gate + 2 lookup cache.stale + 2 invalidation cache.invalidated (7 new assertions in 6 examples). |
+| Command | `docker compose run --rm web bin/rspec` on metrics, cache_invalidation, summarization_service specs |
+| Outcome | **66 examples, 0 failures** (~21.12 s, seed 1). |
+| Pull request | [PR #100](https://github.com/ejgdr/canvas-lms/pull/100) — squash-merged at `758f583b07e572e165f8f8f66792c83a36956420` on 2026-05-27T23:35:18Z |
+| Board status timeline | Issue closed: 2026-05-27T23:35:20Z; Status → Done: 2026-05-27T23:35:21Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9NY` / `183104726`); QA Pass: 2026-05-27T23:36:03Z |
+
+**M3 milestone:** Cycle 20 closes [#20](https://github.com/ejgdr/canvas-lms/issues/20), the M3 observability close-out. M3 fully complete: cycles 15–20 / issues #15, #16, #17, #18, #84, #20.
+
+*Last verified (Cycle 20 row): 2026-05-27 against squash-merge `758f583b07e572e165f8f8f66792c83a36956420`*
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 758f583b07e572e165f8f8f66792c83a36956420*
