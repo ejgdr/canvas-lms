@@ -464,4 +464,29 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 3464a8953cb1002113c6145b01c640740bf25797*
+---
+
+## Cycle 15 — Content-version hash for cache keying (issue #15, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#15](https://github.com/ejgdr/canvas-lms/issues/15) — "[M3] Content-version hash computation for cache keying." Branch `feat/m3-content-version-hash`. |
+| Classification | New application code — `DiscussionThreadSummarizer::ContentVersionHash.call(topic)` is a new pure utility class. No changes to any existing file. |
+| Files added | `app/services/discussion_thread_summarizer/content_version_hash.rb` (56 lines, new file); `spec/services/discussion_thread_summarizer/content_version_hash_spec.rb` (114 lines, new file). |
+| Algorithm | `Digest::SHA256.hexdigest(tuples.to_json)` → 64-char lowercase hex string. Mirrors `DiscussionTopicInsight::Entry.hash_for_dynamic_content` (`app/models/discussion_topic_insight/entry.rb:43–50`): same digest function, same `.to_json` serialization, same uppercase-symbol hash structure. |
+| Input set | Sorted-by-id array of `{id:, message:}` tuples for all non-deleted entries (`discussion_entries.active.order(:id).pluck(:id, :message)`). No user identity (avoids per-viewer cache fragmentation). `.active` scope: `where.not(workflow_state: "deleted")` confirmed at `app/models/discussion_entry.rb:456`. |
+| Output | 64-char hex; fits `DiscussionTopicSummary.dynamic_content_hash` (varchar 255, limit confirmed in `db/migrate/20101210192618_init_canvas_db.rb:2269`) and `DiscussionTopicInsight::Entry.dynamic_content_hash` (varchar 64). |
+| Empty topic | `Digest::SHA256.hexdigest("[]")` — deterministic non-nil hash. No ArgumentError for empty topics; ArgumentError raised only for nil input. |
+| Threshold note | Issue #15 body describes a future token-count threshold so minor edits don't bust the cache. This slice delivers the deterministic hash primitive; threshold filtering is deferred to #16/#17. |
+| Spec style | DB-backed (uses `course_model` + `discussion_topic.discussion_entries.create!`) to exercise the `.active` scope for real, matching Canvas model-spec convention. |
+| Tests added | 9 examples: (1) 64-char hex format; (2) determinism (same state → equal hashes); (3) empty topic returns stable non-nil hash; (4) two different topics → different hashes; (5) new entry added → hash changes; (6) soft-delete excluded → hash changes; (7) soft-deleted only entry → hash equals empty-topic hash; (8) message edit → hash changes; (9) nil raises ArgumentError. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/content_version_hash_spec.rb --format documentation` |
+| Outcome | Exit code 0; **9 examples, 0 failures** (finished in 7.82 seconds, seed 28253). First run: all green. |
+| Pull request | [PR #81](https://github.com/ejgdr/canvas-lms/pull/81) — squash-merged at `dfa1bd32b0406005cb2086d161e7e96e44d16121` on 2026-05-27T17:35:18Z |
+| Evidence PR | (pending merge — see `docs/cycle-15-evidence-records` branch) |
+| Board status timeline | Todo → Done: 2026-05-27T17:35:18Z (auto-closed by PR #81 merge); QA Status → Pass: 2026-05-27T17:38:26Z (GraphQL update on item `PVTI_lAHOBQJOSM4BWez_zgrp9Jk`) |
+| QA Status transition | Pending → Pass at 2026-05-27T17:38:26Z |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge dfa1bd32b0406005cb2086d161e7e96e44d16121*

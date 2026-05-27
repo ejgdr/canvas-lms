@@ -242,4 +242,22 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 3464a8953cb1002113c6145b01c640740bf25797*
+---
+
+## Cycle 15 — Content-version hash for cache keying (issue #15, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#15](https://github.com/ejgdr/canvas-lms/issues/15) — "[M3] Content-version hash computation for cache keying." Branch `feat/m3-content-version-hash`. |
+| Classification | New application code — new pure utility class `DiscussionThreadSummarizer::ContentVersionHash`. No changes to any existing file. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/content_version_hash_spec.rb` (new, 9 DB-backed examples): (1) 64-char hex format; (2) determinism — same topic state twice → equal hashes; (3) empty topic → deterministic non-nil hash; (4) two different topics → different hashes; (5) new entry added → hash changes; (6) soft-delete excluded from active scope → hash changes; (7) soft-deleting only entry → hash equals empty-topic hash; (8) message edit via `update_column` → hash changes; (9) nil topic → `ArgumentError`. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/content_version_hash_spec.rb --format documentation` |
+| Outcome | Exit code 0; **9 examples, 0 failures** (finished in 7.82 seconds, seed 28253). First run: all green. |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #81](https://github.com/ejgdr/canvas-lms/pull/81), squash-merged at `dfa1bd32b0406005cb2086d161e7e96e44d16121` |
+| Trace to plan | FR-2 (cache and invalidate summaries on meaningful thread change) — `ContentVersionHash` is the deterministic key that #16 (cache write) and #17 (invalidation) will consume. The hash changes on entry add, soft-delete, or message edit; it is stable for identical topic state across process restarts (Digest::SHA256, not Object#hash). No user identity → no per-viewer cache fragmentation. |
+| Board transitions | Todo → Done: 2026-05-27T17:35:18Z (auto-closed by PR #81 merge); QA Status Pending → Pass: 2026-05-27T17:38:26Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9Jk`) |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge dfa1bd32b0406005cb2086d161e7e96e44d16121*
