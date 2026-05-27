@@ -24,10 +24,6 @@ module DiscussionThreadSummarizer
   #
   # This is the only code path that calls the model client. Controllers, jobs,
   # and cache layers all go through here, never through the client directly.
-  #
-  # The three private pipeline stubs (gather, pseudonymize, validate) are
-  # no-ops in this scaffold slice. Each carries a comment naming the future
-  # slice that replaces it with real logic.
   class SummarizationService
     def initialize(client: StubModelClient.new)
       @client = client
@@ -37,7 +33,9 @@ module DiscussionThreadSummarizer
       account = discussion_topic.context.root_account
       payload = gather(discussion_topic, viewer)
       payload = pseudonymize(payload)
-      result  = @client.summarize(payload)
+      t0      = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      result = @client.summarize(payload)
       begin
         validate(result)
       rescue DiscussionThreadSummarizer::SchemaViolationError
@@ -45,6 +43,19 @@ module DiscussionThreadSummarizer
         raise
       end
       result
+    ensure
+      if t0
+        propagating = $!
+        emit_audit_log(
+          thread_id:         discussion_topic.id,
+          scope_mode:        payload[:scope_mode],
+          model_identifier:  @client.class.name,
+          request_byte_size: payload.to_json.bytesize,
+          latency_ms:        ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round,
+          success:           propagating.nil?,
+          error_category:    error_category_for(propagating)
+        )
+      end
     end
 
     private
@@ -98,6 +109,27 @@ module DiscussionThreadSummarizer
 
     def validate(result)
       OutputSchemaValidator.call(result)
+    end
+
+    # Maps a propagating exception to an audit log error_category string.
+    # Returns nil on the success path ($! == nil).
+    # Returns "unknown" for unanticipated exception types so ops dashboards
+    # always have a non-null category to filter on when success: false.
+    def error_category_for(exception)
+      case exception
+      when nil                                              then nil
+      when DiscussionThreadSummarizer::SchemaViolationError then "schema_invalid"
+      when DiscussionThreadSummarizer::TransportError       then "transport_error"
+      else "unknown"
+      end
+    end
+
+    # Emits a structured JSON audit line per generation attempt (FR-5, NFR-2).
+    # Raw payload content and author names are never included — metadata only.
+    def emit_audit_log(**fields)
+      Rails.logger.info(
+        { event: "discussion_thread_summarizer.generation_attempt", **fields }.to_json
+      )
     end
   end
 end
