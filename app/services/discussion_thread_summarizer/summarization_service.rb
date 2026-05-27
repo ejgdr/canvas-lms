@@ -58,6 +58,17 @@ module DiscussionThreadSummarizer
     # Cache-aware entrypoint: O(1) lookup by content hash + config version + locale.
     # On hit, returns stored summary without calling the model client.
     def fetch_or_create_summary(discussion_topic:, viewer:, locale: I18n.locale.to_s)
+      course = discussion_topic.context
+      unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
+        # Defense-in-depth flag gate mirroring #lookup_for_render guard. Production
+        # callers (job, controller) already gate the flag before reaching here; this
+        # guard prevents accidental invocation from misconfigured contexts. See #20 DoD.
+        # Returns :rate_limited without invoking the limiter or model — not a real deny,
+        # but the closest frozen CacheResult.status that blocks regeneration (no :disabled
+        # in the pipeline enum). Documented in Cycle 20 evidence.
+        return CacheResult.new(status: :rate_limited, record: nil, result: nil)
+      end
+
       account      = discussion_topic.context.root_account
       content_hash = ContentVersionHash.call(discussion_topic)
       cached       = find_cached_summary(discussion_topic, content_hash, locale)
@@ -206,10 +217,12 @@ module DiscussionThreadSummarizer
       case RegenerationRateLimiter.preview(account:, user: viewer, discussion_topic:)
       when :cooldown_denied, :quota_denied
         DiscussionThreadSummarizer::Metrics.increment_render_rate_limited_stale(account:)
+        DiscussionThreadSummarizer::Metrics.increment_cache_stale(account:)
         RenderResult.new(status: :rate_limited_stale, record:, result: parsed, enqueued: false)
       else
         self.class.enqueue_for(discussion_topic:, viewer:)
         DiscussionThreadSummarizer::Metrics.increment_render_stale(account:)
+        DiscussionThreadSummarizer::Metrics.increment_cache_stale(account:)
         RenderResult.new(status: :stale, record:, result: parsed, enqueued: true)
       end
     end

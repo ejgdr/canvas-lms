@@ -61,6 +61,28 @@ module DiscussionThreadSummarizer
       )
     end
 
+    # Part of the cache.* family (NFR-4: cache effectiveness telemetry). Parallel to
+    # render.stale and render.rate_limited_stale, which serve render-state dashboards.
+    # Both render states fire cache.stale because both serve orphan-hash content from
+    # the cache without regeneration. Dual-emit is intentional — see Cycle 20 evidence.
+    def self.increment_cache_stale(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.cache.stale",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Part of the cache.* family (NFR-4). Parallel to invalidation.fired (Cycle 17),
+    # which serves write-side event dashboards. Same callsites; trigger tag uses
+    # reply_* values per #20 AC (reply_create / reply_edit / reply_delete), while
+    # invalidation.fired uses cause: create/edit/delete. Dual-emit is intentional.
+    def self.increment_cache_invalidated(trigger:, account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.cache.invalidated",
+        tags: { account_id: account.global_id, trigger: }
+      )
+    end
+
     # Emitted when generation fails for any reason.
     # reason: one of "quota_exceeded", "throttled", "schema_invalid",
     #         "transport_error", "unknown"
