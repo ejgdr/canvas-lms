@@ -25,10 +25,20 @@ describe DiscussionThreadSummarizer::SummarizationService do
   let(:topic)            { instance_double("DiscussionTopic", id: 42, context: course) }
   let(:viewer)           { instance_double("User", id: 99) }
   let(:entries_relation) { double("AR::Relation") }
+  let(:malformed_client) do
+    Class.new(DiscussionThreadSummarizer::ModelClient) do
+      def summarize(_payload)
+        { themes: nil }  # missing required keys + wrong type
+      end
+    end.new
+  end
 
   # Default gather-chain stubs: default mode, no entries.
   # Keeps the four pre-existing #summarize examples working unchanged.
   before do
+    # Force Zeitwerk to autoload OutputSchemaValidator (and SchemaViolationError)
+    # before any example evaluates the constant as a raise_error argument.
+    DiscussionThreadSummarizer::OutputSchemaValidator
     allow(root_account).to receive(:feature_enabled?)
       .with(:discussion_thread_summarizer_scope_limited)
       .and_return(false)
@@ -37,6 +47,9 @@ describe DiscussionThreadSummarizer::SummarizationService do
     allow(entries_relation).to receive(:order).and_return(entries_relation)
     allow(entries_relation).to receive(:preload).and_return(entries_relation)
     allow(entries_relation).to receive(:to_a).and_return([])
+    # Suppress audit log output across all examples; the audit-log context
+    # overrides this with a capturing stub to assert on logged content.
+    allow(Rails.logger).to receive(:info)
   end
 
   # ── Pre-existing #summarize contract examples (Cycles 7–8, unchanged) ────
@@ -94,17 +107,92 @@ describe DiscussionThreadSummarizer::SummarizationService do
     end
   end
 
-  # ── Schema validator wiring (Cycle 10) ───────────────────────────────────
+  # ── Audit log emission (Cycle 11) ────────────────────────────────────────
 
-  context "schema validation" do
-    let(:malformed_client) do
+  context "audit log emission" do
+    let(:logged_payloads) { [] }
+
+    before do
+      allow(Rails.logger).to receive(:info) { |msg| logged_payloads << msg }
+    end
+
+    def audit_log
+      JSON.parse(logged_payloads.last, symbolize_names: true)
+    end
+
+    let(:transport_client) do
       Class.new(DiscussionThreadSummarizer::ModelClient) do
         def summarize(_payload)
-          { themes: nil }  # missing required keys + wrong type
+          raise DiscussionThreadSummarizer::TransportError, "connection refused"
         end
       end.new
     end
 
+    let(:broken_client) do
+      Class.new(DiscussionThreadSummarizer::ModelClient) do
+        def summarize(_payload)
+          raise StandardError, "boom"
+        end
+      end.new
+    end
+
+    it "success path emits one audit record with success: true and all required fields" do
+      service.summarize(discussion_topic: topic, viewer:)
+      log = audit_log
+      expect(log[:success]).to be(true)
+      expect(log[:error_category]).to be_nil
+      expect(log).to include(
+        :thread_id, :scope_mode, :model_identifier,
+        :request_byte_size, :latency_ms
+      )
+      expect(log[:event]).to eq("discussion_thread_summarizer.generation_attempt")
+    end
+
+    it "schema violation emits audit record with success: false and 'schema_invalid', then re-raises" do
+      svc = described_class.new(client: malformed_client)
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::SchemaViolationError)
+      log = audit_log
+      expect(log[:success]).to be(false)
+      expect(log[:error_category]).to eq("schema_invalid")
+    end
+
+    it "transport error emits audit record with success: false and 'transport_error', then re-raises" do
+      svc = described_class.new(client: transport_client)
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::TransportError)
+      log = audit_log
+      expect(log[:success]).to be(false)
+      expect(log[:error_category]).to eq("transport_error")
+    end
+
+    it "unexpected exception emits audit record with success: false and 'unknown', then re-raises" do
+      svc = described_class.new(client: broken_client)
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(StandardError, "boom")
+      log = audit_log
+      expect(log[:success]).to be(false)
+      expect(log[:error_category]).to eq("unknown")
+    end
+
+    it "emits exactly one audit log call per generation attempt regardless of outcome" do
+      svc = described_class.new(client: malformed_client)
+      expect { svc.summarize(discussion_topic: topic, viewer:) }
+        .to raise_error(DiscussionThreadSummarizer::SchemaViolationError)
+      expect(logged_payloads.size).to eq(1)
+    end
+
+    it "logged record contains no raw entry content or author names (PII guard)" do
+      service.summarize(discussion_topic: topic, viewer:)
+      raw_log = logged_payloads.last
+      expect(raw_log).not_to include("entries")
+      expect(raw_log).not_to match(/[Aa]uthor|Alice|Bob/)
+    end
+  end
+
+  # ── Schema validator wiring (Cycle 10) ───────────────────────────────────
+
+  context "schema validation" do
     it "propagates SchemaViolationError when the client returns malformed output" do
       svc = described_class.new(client: malformed_client)
       expect { svc.summarize(discussion_topic: topic, viewer:) }
