@@ -174,4 +174,30 @@ describe DiscussionThreadSummarizer::RegenerationRateLimiter do
       "You may remove the 'rate_limit' option from the LLMConfig to disable rate limiting."
     )
   end
+
+  describe ".preview" do
+    it "does not mutate Redis (no SET, INCR, DECR, or EXPIRE)" do
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+      expect(Canvas.redis).not_to receive(:set)
+      expect(Canvas.redis).not_to receive(:incr)
+      expect(Canvas.redis).not_to receive(:decr)
+      expect(Canvas.redis).not_to receive(:expire)
+
+      described_class.preview(account:, user:, discussion_topic: topic)
+    end
+
+    it "checks cooldown before quota and does not read quota when cooldown key is present" do
+      allow(Canvas.redis).to receive(:get).with(cooldown_key).and_return("1")
+      expect(Canvas.redis).not_to receive(:get).with(quota_key)
+
+      expect(described_class.preview(account:, user:, discussion_topic: topic)).to eq(:cooldown_denied)
+    end
+
+    it "returns :quota_denied when the daily counter is at the limit" do
+      allow(Canvas.redis).to receive(:get).with(cooldown_key).and_return(nil)
+      allow(Canvas.redis).to receive(:get).with(quota_key).and_return("100")
+
+      expect(described_class.preview(account:, user:, discussion_topic: topic)).to eq(:quota_denied)
+    end
+  end
 end

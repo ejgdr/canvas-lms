@@ -1358,4 +1358,68 @@ describe DiscussionTopicsApiController do
       end
     end
   end
+
+  context "thread_summary (Discussion Thread Summarizer)" do
+    before do
+      course_with_student(active_all: true)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @topic = @course.discussion_topics.create!(title: "discussion")
+      @topic.discussion_entries.create!(user: @student, message: "hello")
+      user_session(@student)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+    end
+
+    it "returns HTTP 200 with disabled payload when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+
+      get "thread_summary",
+          params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+          format: "json"
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq(
+        "status" => "disabled",
+        "enabled" => false,
+        "enqueued" => false
+      )
+    end
+
+    it "returns current status with summary JSON when the cache row matches" do
+      content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic)
+      @topic.summaries.create!(
+        user: @student,
+        locale: "en",
+        summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+        dynamic_content_hash: content_hash,
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+      )
+
+      get "thread_summary",
+          params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+          format: "json"
+
+      expect(response).to be_successful
+      body = response.parsed_body
+      expect(body["status"]).to eq("current")
+      expect(body["enabled"]).to be(true)
+      expect(body["enqueued"]).to be(false)
+      expect(body["summary"]).to eq(
+        DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.deep_stringify_keys
+      )
+    end
+
+    it "returns generating status and enqueues when no summary row exists" do
+      expect do
+        get "thread_summary",
+            params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+            format: "json"
+      end.to change { Delayed::Job.count }.by(1)
+
+      body = response.parsed_body
+      expect(body["status"]).to eq("generating")
+      expect(body["enqueued"]).to be(true)
+      expect(body["summary"]).to be_nil
+    end
+  end
 end

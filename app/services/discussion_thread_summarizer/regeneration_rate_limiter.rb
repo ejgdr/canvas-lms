@@ -44,6 +44,26 @@ module DiscussionThreadSummarizer
       :allowed
     end
 
+    # READ-ONLY probe. Mirrors .check's cooldown-before-quota ordering using GET
+    # on the cooldown key and quota counter. Does NOT mutate Redis — no SET, no
+    # INCR, no DECR, no EXPIRE. Intended for render-time decisions where
+    # consuming budget would be incorrect (the generation worker calls .check).
+    def self.preview(account:, user:, discussion_topic:)
+      course = discussion_topic.context
+      return :allowed unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
+
+      raise REDIS_REQUIRED_MESSAGE unless Canvas.redis_enabled?
+
+      if Canvas.redis.get(cooldown_key(user, discussion_topic)).present?
+        return :cooldown_denied
+      end
+
+      limit = Setting.get(QUOTA_SETTING_KEY, DEFAULT_DAILY_QUOTA).to_i
+      return :quota_denied if Canvas.redis.get(quota_key(account)).to_i >= limit
+
+      :allowed
+    end
+
     def self.acquire_cooldown(user:, discussion_topic:)
       seconds = Setting.get(COOLDOWN_SETTING_KEY, DEFAULT_COOLDOWN_SECONDS).to_i
       Canvas.redis.set(cooldown_key(user, discussion_topic), 1, nx: true, ex: seconds)

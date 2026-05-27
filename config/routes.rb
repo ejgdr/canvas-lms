@@ -1639,6 +1639,7 @@ CanvasRails::Application.routes.draw do
         delete "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id", controller: :discussion_topics, action: :destroy
 
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/view", action: :view, as: "#{context}_discussion_topic_view"
+        get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary", action: :thread_summary, as: "#{context}_discussion_topic_thread_summary"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_summary, as: "#{context}_discussion_topic_summary"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_or_create_summary, as: "#{context}_discussion_topic_create_summary"
         put "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries/disable", action: :disable_summary, as: "#{context}_discussion_topic_disable_summary"

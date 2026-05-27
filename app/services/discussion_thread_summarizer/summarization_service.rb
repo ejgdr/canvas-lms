@@ -29,6 +29,17 @@ module DiscussionThreadSummarizer
 
     CacheResult = Struct.new(:status, :record, :result, keyword_init: true)
 
+    RenderState = %i[
+      current
+      stale
+      generating
+      rate_limited_stale
+      rate_limited_empty
+      disabled
+    ].freeze
+
+    RenderResult = Struct.new(:status, :record, :result, :enqueued, keyword_init: true)
+
     # Enqueues a background summary attempt via Delayed Job.
     # Mirrors the insight_generation pattern in DiscussionTopicsApiController.
     # Singleton + n_strand ensure at most one job per topic runs at a time.
@@ -91,6 +102,51 @@ module DiscussionThreadSummarizer
       CacheResult.new(status: :miss, record: record, result: result)
     end
 
+    # Render-time lookup: read-only with respect to the model and rate-limit budget.
+    def lookup_for_render(discussion_topic:, viewer:, locale: I18n.locale.to_s)
+      course = discussion_topic.context
+      unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
+        if course.is_a?(Course)
+          DiscussionThreadSummarizer::Metrics.increment_render_disabled(account: course.root_account)
+        end
+        return RenderResult.new(status: :disabled, record: nil, result: nil, enqueued: false)
+      end
+
+      account = discussion_topic.context.root_account
+      record      = find_latest_summary_row(discussion_topic, locale)
+      current_hash = ContentVersionHash.call(discussion_topic)
+
+      # NOTE: This is the render-time lookup. Distinct from #fetch_or_create_summary
+      # (cache miss path that actually invokes the model). Read-only with respect to
+      # the model and rate-limit budget — uses RegenerationRateLimiter.preview, never
+      # .check. Enqueue happens here when state is :stale or :generating AND preview
+      # allows. The job's miss path will consult .check authoritatively; race between
+      # preview-allow and job-deny is acceptable (one-cycle delay).
+      #
+      # Hash race: ContentVersionHash.call(topic) is computed after the row fetch.
+      # Concurrent entry edits can make :current appear :stale (or vice versa) for
+      # one request. Self-corrects on next render. Matches the legacy summary
+      # `obsolete` flag race semantics (discussion_topics_api_controller.rb:135).
+      #
+      # Singleton: enqueue_for keys only discussion_topic.id (not locale). Multiple
+      # locales requesting refresh for the same topic share one Delayed::Job; the job
+      # runs fetch_or_create_summary with the viewer/locale from whichever enqueue won.
+
+      if record.nil?
+        build_generating_or_rate_limited_empty(discussion_topic:, viewer:, locale:, account:)
+      elsif record.dynamic_content_hash == current_hash
+        DiscussionThreadSummarizer::Metrics.increment_render_current(account:)
+        RenderResult.new(
+          status: :current,
+          record:,
+          result: parse_summary_record(record),
+          enqueued: false
+        )
+      else
+        build_stale_or_rate_limited_stale(discussion_topic:, viewer:, locale:, account:, record:)
+      end
+    end
+
     def summarize(discussion_topic:, viewer:)
       account = discussion_topic.context.root_account
       payload = gather(discussion_topic, viewer)
@@ -121,6 +177,42 @@ module DiscussionThreadSummarizer
     end
 
     private
+
+    def find_latest_summary_row(discussion_topic, locale)
+      discussion_topic.summaries
+                      .where(
+                        llm_config_version: LLM_CONFIG_VERSION,
+                        parent_id: nil,
+                        locale:
+                      )
+                      .order(created_at: :desc)
+                      .first
+    end
+
+    def build_generating_or_rate_limited_empty(discussion_topic:, viewer:, locale:, account:)
+      case RegenerationRateLimiter.preview(account:, user: viewer, discussion_topic:)
+      when :cooldown_denied, :quota_denied
+        DiscussionThreadSummarizer::Metrics.increment_render_rate_limited_empty(account:)
+        RenderResult.new(status: :rate_limited_empty, record: nil, result: nil, enqueued: false)
+      else
+        self.class.enqueue_for(discussion_topic:, viewer:)
+        DiscussionThreadSummarizer::Metrics.increment_render_generating(account:)
+        RenderResult.new(status: :generating, record: nil, result: nil, enqueued: true)
+      end
+    end
+
+    def build_stale_or_rate_limited_stale(discussion_topic:, viewer:, locale:, account:, record:)
+      parsed = parse_summary_record(record)
+      case RegenerationRateLimiter.preview(account:, user: viewer, discussion_topic:)
+      when :cooldown_denied, :quota_denied
+        DiscussionThreadSummarizer::Metrics.increment_render_rate_limited_stale(account:)
+        RenderResult.new(status: :rate_limited_stale, record:, result: parsed, enqueued: false)
+      else
+        self.class.enqueue_for(discussion_topic:, viewer:)
+        DiscussionThreadSummarizer::Metrics.increment_render_stale(account:)
+        RenderResult.new(status: :stale, record:, result: parsed, enqueued: true)
+      end
+    end
 
     def find_cached_summary(discussion_topic, content_hash, locale)
       # NOTE: Cache key assumes discussion_thread_summarizer_scope_limited is OFF.
