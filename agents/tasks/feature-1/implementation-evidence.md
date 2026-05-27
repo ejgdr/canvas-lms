@@ -508,7 +508,7 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb --format documentation` |
 | Outcome | Exit code 0; **38 examples, 0 failures** (finished in 13.63 seconds, seed 60703). First run after fixes: all green. |
 | Pull request | [PR #86](https://github.com/ejgdr/canvas-lms/pull/86) — squash-merged at `1f8256d4682c801efd00365ca89d9e417dd17096` on 2026-05-27T18:18:04Z |
-| Evidence PR | (pending merge — `docs/cycle-16-evidence-records`) |
+| Evidence PR | [PR #87](https://github.com/ejgdr/canvas-lms/pull/87) — squash-merged at `e4f6e793b8e4d062c3ab547e80754444c72c350c` on 2026-05-27T18:20:11Z |
 | Board status timeline | Todo → Done: 2026-05-27T18:18:04Z (auto-closed by PR #86); QA Status → Pass: 2026-05-27T18:19:19Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9J8`) |
 
 ---
