@@ -576,6 +576,7 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose run --rm web bin/rspec spec/services/discussion_thread_summarizer/regeneration_rate_limiter_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
 | Outcome | Exit code 0; **50 examples, 0 failures, 1 skipped** (15.09 s seed 1; also verified seeds 13659, 511). |
 | Pull request | [PR #92](https://github.com/ejgdr/canvas-lms/pull/92) — squash-merged at `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011` on 2026-05-27T21:00:03Z |
+| Evidence PR | [PR #93](https://github.com/ejgdr/canvas-lms/pull/93) — squash-merged at `15979bc24244ac5a46e04c78ea9af372827a1843` on 2026-05-27T21:01:14Z |
 | Board status timeline | Done: 2026-05-27T21:00:05Z (auto-closed by PR #92); QA Status → Pass: 2026-05-27T21:00:16Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9LM`) |
 
 *Last verified (Cycle 18 row): 2026-05-27 against squash-merge `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011`*
