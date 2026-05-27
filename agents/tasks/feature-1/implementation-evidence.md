@@ -616,6 +616,7 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose run --rm web bin/rspec` on limiter, summarization_service, controller, integration specs |
 | Outcome | Exit code 0; **141 examples, 0 failures, 3 pending** (~1m15s, seed 1). |
 | Pull request | [PR #97](https://github.com/ejgdr/canvas-lms/pull/97) — squash-merged at `92e6d7dde058bab1050a6226ec3509996c324752` on 2026-05-27T23:11:25Z |
+| Evidence PR | [PR #98](https://github.com/ejgdr/canvas-lms/pull/98) — squash-merged at `c7e1fca2a0d370e9a147c4e877090a98e680bc97` on 2026-05-27T23:13:16Z |
 | Board status timeline | Issue closed: 2026-05-27T23:11:26Z (PR #97 `closes #84`); Status → Done: 2026-05-27T23:12:12Z (project item add + explicit field, item `PVTI_lAHOBQJOSM4BWez_zgt_o0A`); QA Status → Pass: 2026-05-27T23:12:39Z (GraphQL update on item `192914240`) |
 
 *Last verified (Cycle 19 row): 2026-05-27 against squash-merge `92e6d7dde058bab1050a6226ec3509996c324752`*
