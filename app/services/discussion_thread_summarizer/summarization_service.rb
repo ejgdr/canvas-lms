@@ -61,6 +61,25 @@ module DiscussionThreadSummarizer
       end
 
       DiscussionThreadSummarizer::Metrics.increment_cache_miss(account:)
+
+      # NOTE: The rekey path in DiscussionThreadSummarizer::CacheInvalidation does NOT
+      # pass through this gate — rekey is a metadata-only UPDATE that never invokes the
+      # model, so it must not consume cooldown or daily-quota budget. The limiter is
+      # only consulted on the cache-miss path of #fetch_or_create_summary, immediately
+      # before #summarize. Cache hits also bypass the limiter (no model call).
+      #
+      # Redis-down posture: fail-closed — matches InstLLMHelper behavior verified at
+      # app/helpers/inst_llm_helper.rb:41 during Cycle 18 (raises when Redis disabled).
+      case RegenerationRateLimiter.check(account:, user: viewer, discussion_topic:)
+      when :cooldown_denied
+        DiscussionThreadSummarizer::Metrics.increment_rate_limit_cooldown_denied(account:)
+        return CacheResult.new(status: :rate_limited, record: nil, result: nil)
+      when :quota_denied
+        DiscussionThreadSummarizer::Metrics.increment_rate_limit_quota_denied(account:)
+        return CacheResult.new(status: :rate_limited, record: nil, result: nil)
+      end
+
+      DiscussionThreadSummarizer::Metrics.increment_rate_limit_allowed(account:)
       result = summarize(discussion_topic:, viewer:)
       record = persist_summary_record(
         discussion_topic:,

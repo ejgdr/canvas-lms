@@ -88,6 +88,30 @@ module DiscussionThreadSummarizer
       )
     end
 
+    # Emitted when regeneration is allowed (cooldown and quota checks passed).
+    def self.increment_rate_limit_allowed(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.rate_limit.allowed",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when per-user per-thread cooldown denies regeneration.
+    def self.increment_rate_limit_cooldown_denied(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.rate_limit.cooldown_denied",
+        tags: { account_id: account.global_id }
+      )
+    end
+
+    # Emitted when per-account daily quota denies regeneration.
+    def self.increment_rate_limit_quota_denied(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.rate_limit.quota_denied",
+        tags: { account_id: account.global_id }
+      )
+    end
+
     # Emitted when a user submits an inaccuracy report against a summary.
     # reason_category: one of "inaccurate", "missed_viewpoint",
     #                  "harmful_content", "other"

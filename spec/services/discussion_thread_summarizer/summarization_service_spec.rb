@@ -583,4 +583,53 @@ describe "DiscussionThreadSummarizer::SummarizationService#fetch_or_create_summa
       .with(account: course.root_account)
     expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_cache_hit)
   end
+
+  context "regeneration rate limiter (Cycle 18)" do
+    before do
+      course.enable_feature!(:discussion_thread_summarizer)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+    end
+
+    it "returns :rate_limited on cooldown deny without calling the model" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:check)
+        .and_return(:cooldown_denied)
+      allow(stub_client).to receive(:summarize).and_call_original
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_rate_limit_cooldown_denied)
+
+      result = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+      expect(result.status).to eq(:rate_limited)
+      expect(result.record).to be_nil
+      expect(result.result).to be_nil
+      expect(stub_client).not_to have_received(:summarize)
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_rate_limit_cooldown_denied)
+        .with(account: course.root_account)
+    end
+
+    it "returns :rate_limited on quota deny without persisting a summary row" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:check)
+        .and_return(:quota_denied)
+      allow(stub_client).to receive(:summarize).and_call_original
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_rate_limit_quota_denied)
+
+      expect do
+        result = service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+        expect(result.status).to eq(:rate_limited)
+      end.not_to change { topic.summaries.count }
+
+      expect(stub_client).not_to have_received(:summarize)
+    end
+
+    it "emits rate_limit.allowed and summarizes when the limiter allows" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:check).and_return(:allowed)
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_rate_limit_allowed)
+      allow(stub_client).to receive(:summarize).and_call_original
+
+      service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_rate_limit_allowed)
+        .with(account: course.root_account)
+      expect(stub_client).to have_received(:summarize).once
+    end
+  end
 end
