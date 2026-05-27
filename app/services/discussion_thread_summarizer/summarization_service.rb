@@ -25,6 +25,17 @@ module DiscussionThreadSummarizer
   # This is the only code path that calls the model client. Controllers, jobs,
   # and cache layers all go through here, never through the client directly.
   class SummarizationService
+    # Enqueues a background summary attempt via Delayed Job.
+    # Mirrors the insight_generation pattern in DiscussionTopicsApiController.
+    # Singleton + n_strand ensure at most one job per topic runs at a time.
+    def self.enqueue_for(discussion_topic:, viewer:)
+      new.delay(
+        priority: Delayed::HIGH_PRIORITY,
+        singleton: "discussion_thread_summarizer:generation_for_topic:#{discussion_topic.id}",
+        n_strand: ["discussion_thread_summarizer:generation:#{Shard.current.database_server.region}", 1]
+      ).summarize(discussion_topic:, viewer:)
+    end
+
     def initialize(client: StubModelClient.new)
       @client = client
     end

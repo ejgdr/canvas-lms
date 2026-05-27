@@ -52,6 +52,64 @@ describe DiscussionThreadSummarizer::SummarizationService do
     allow(Rails.logger).to receive(:info)
   end
 
+  # ── Async enqueueing via .enqueue_for (Cycle 12) ─────────────────────────
+
+  describe ".enqueue_for" do
+    let(:delay_proxy) { instance_double(described_class, summarize: nil) }
+
+    it "dispatches with HIGH_PRIORITY, singleton scoped to the topic id, and n_strand with region" do
+      expected_singleton = "discussion_thread_summarizer:generation_for_topic:42"
+      expected_n_strand  = ["discussion_thread_summarizer:generation:#{Shard.current.database_server.region}", 1]
+
+      expect_any_instance_of(described_class).to receive(:delay).with(
+        hash_including(
+          priority:  Delayed::HIGH_PRIORITY,
+          singleton: expected_singleton,
+          n_strand:  expected_n_strand
+        )
+      ).and_return(delay_proxy)
+
+      described_class.enqueue_for(discussion_topic: topic, viewer:)
+    end
+
+    it "chains #summarize on the delay proxy with the correct discussion_topic and viewer kwargs" do
+      expect_any_instance_of(described_class).to receive(:delay).and_return(delay_proxy)
+      expect(delay_proxy).to receive(:summarize).with(discussion_topic: topic, viewer:)
+
+      described_class.enqueue_for(discussion_topic: topic, viewer:)
+    end
+
+    it "encodes the topic id in the singleton key so the same topic always produces the same key" do
+      captured_singleton = nil
+      allow_any_instance_of(described_class).to receive(:delay) do |_instance, **opts|
+        captured_singleton = opts[:singleton]
+        delay_proxy
+      end
+
+      described_class.enqueue_for(discussion_topic: topic, viewer:)
+
+      expect(captured_singleton).to eq("discussion_thread_summarizer:generation_for_topic:42")
+    end
+
+    it "produces distinct singleton keys for topics with different ids" do
+      topic_a = instance_double("DiscussionTopic", id: 42, context: course)
+      topic_b = instance_double("DiscussionTopic", id: 99, context: course)
+      collected_keys = []
+
+      allow_any_instance_of(described_class).to receive(:delay) do |_instance, **opts|
+        collected_keys << opts[:singleton]
+        delay_proxy
+      end
+
+      described_class.enqueue_for(discussion_topic: topic_a, viewer:)
+      described_class.enqueue_for(discussion_topic: topic_b, viewer:)
+
+      expect(collected_keys.uniq.size).to eq(2)
+      expect(collected_keys.first).to include("42")
+      expect(collected_keys.last).to include("99")
+    end
+  end
+
   # ── Pre-existing #summarize contract examples (Cycles 7–8, unchanged) ────
 
   describe "#summarize" do
