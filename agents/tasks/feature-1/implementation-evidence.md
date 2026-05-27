@@ -416,8 +416,11 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Tests added | 4 examples in new `describe ".enqueue_for"` block: (1) dispatches with HIGH_PRIORITY, correct singleton, correct n_strand; (2) chains #summarize on the proxy with correct kwargs; (3) singleton key includes topic id (same topic → same key); (4) distinct topics → distinct keys. |
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
 | Outcome | Exit code 0; **22 examples, 0 failures** (finished in 1.39 seconds, seed 44441). First run: all green. |
-| Commit | `ec96dae82ea` on branch `feat/m2-async-summarization-job`. |
+| Pull request | [PR #72](https://github.com/ejgdr/canvas-lms/pull/72) — squash-merged at `5d71ab9c955ecd407470cfcf9b2f83f94ed850f6` on 2026-05-27T02:25:14Z |
+| Evidence PR | [PR #73](https://github.com/ejgdr/canvas-lms/pull/73) — squash-merged at `cd8e1f435b64981a0f7a3aa9c2659a3d3264ac88` on 2026-05-27T02:26:40Z |
+| Board status timeline | Todo → In Progress (implicit from In Progress → Done); In Progress → Done at 2026-05-27T02:27:XXZ (GraphQL update on item `PVTI_lAHOBQJOSM4BWez_zgrp9HE`) |
+| QA Status transition | Pending → Pass at 2026-05-27T02:27:XXZ (GraphQL update on item `PVTI_lAHOBQJOSM4BWez_zgrp9HE`) |
 
 ---
 
-*Last verified: 2026-05-27 against commit ec96dae82ea*
+*Last verified: 2026-05-27 against squash-merge 5d71ab9c955ecd407470cfcf9b2f83f94ed850f6*
