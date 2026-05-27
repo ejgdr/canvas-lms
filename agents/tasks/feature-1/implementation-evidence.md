@@ -545,4 +545,41 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 3db30731b6ece2d75408ad331c6ec0a84fac00e4*
+## Cycle 18 — Regeneration rate limiter (issue #18, M3)
+
+**Pre-implementation prerequisites (completed before branch):**
+
+| Step | Result |
+|---|---|
+| InstLLMHelper Redis-down posture | At `app/helpers/inst_llm_helper.rb:41`: `raise "InstLLMHelper rate limiting requires Redis to be enabled for the Canvas instance. You may remove the 'rate_limit' option from the LLMConfig to disable rate limiting." unless Canvas.redis_enabled?` — **denies** (fail-closed `raise`, not allow-with-warn). **Cycle 18 matches — fail-closed raise when `!Canvas.redis_enabled?`.** |
+| [#18](https://github.com/ejgdr/canvas-lms/issues/18) re-scope | Issue body updated: pipeline-only deny contract (`:rate_limited`, `record: nil`, `result: nil` + `rate_limit.cooldown_denied` or `quota_denied` metric). User-visible stale/rate-limited rendering → **#84**. Admin/instructor override → **#23** (Cycle 18 has no admin bypass). |
+
+**Procedural — design locked at Checkpoint 1:**
+
+- **Storage:** `Canvas.redis` only — cooldown `SET key 1 NX EX <seconds>`; daily quota `INCR` on UTC day-bucketed key `%Y%m%d` with `DECR` rollback on deny.
+- **Settings:** `discussion_thread_summarizer_user_thread_cooldown_seconds` default `"600"` (10 minutes, per issue body "e.g. 10 minutes"); `discussion_thread_summarizer_account_daily_quota` default `"100"` (conservative initial cap; upward tuning expected after observed account-level usage).
+- **Application point:** `SummarizationService#fetch_or_create_summary` cache-miss path, immediately before `#summarize`.
+- **Check ordering:** Cooldown first; if cooldown denies, quota `INCR` does not run — only `rate_limit.cooldown_denied` fires.
+- **Contract change (only post–Cycle-16):** `CacheResult.status` enum extended with `:rate_limited` (`record: nil`, `result: nil` on deny). `#fetch_or_create_summary(discussion_topic:, viewer:, locale:)` kwargs **unchanged**.
+- **Rekey invariant (Cycle 17):** `CacheInvalidation` has no reference to `RegenerationRateLimiter`; rekey never consumes budget. Proved by spec example **"does not touch Redis during CacheInvalidation rekey"** — `expect(Canvas.redis).not_to have_received(:set)` and `not_to have_received(:incr)` (no limiter Redis ops; `decr`/`expire` likewise absent).
+
+**Diff overage acknowledgment:** +347 combined lines (impl 121 + spec 226). Over the 250 soft cap by ~39%. Spec overrun on `regeneration_rate_limiter_spec.rb` (177 vs estimated 110) and `summarization_service_spec.rb` integration examples (49 vs estimated 25). Surfaced per cycle convention rather than absorbed silently. Cycle 19 should either accept a recalibrated budget or apply stricter pre-write spec discipline.
+
+| Field | Content |
+|---|---|
+| Slice | [#18](https://github.com/ejgdr/canvas-lms/issues/18) — "[M3] Regeneration rate limiter." Branch `feat/m3-rate-limiter`. |
+| Classification | Behavior-changing application code — new `RegenerationRateLimiter`; gate on cache-miss path; three `rate_limit.*` metrics. |
+| Files changed | `app/services/discussion_thread_summarizer/regeneration_rate_limiter.rb` (new, 78 lines); `app/services/discussion_thread_summarizer/summarization_service.rb` (+19 lines gate + comment); `lib/discussion_thread_summarizer/metrics.rb` (+24 lines); `spec/services/discussion_thread_summarizer/regeneration_rate_limiter_spec.rb` (new, 177 lines, 10 unit + 1 documented skip); `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (+49 lines, 3 integration). Net **+347** — **diff cap surfaced** (see acknowledgment above). |
+| Tripwires | No `ContentVersionHash` edits; no `CacheInvalidation` edits; no cache tuple / kwargs changes; no new flags; no migration (Redis-only); no #84 render-path; no admin bypass; no audit DB; PR closes **#18 only**. |
+| Spec-idiom fix | `Time.zone.utc(...)` corrected to `Time.utc(...)` after four spec runs (Rails idiom — `Time.zone` is a `TimeZone` object, not a `Time` constructor). |
+| Tests added | 10 limiter unit examples + 1 skip (SET NX atomicity); 3 `fetch_or_create_summary` `:rate_limited` integration examples; rekey-bypass + cooldown-before-quota + rollback-parity examples. |
+| Command | `docker compose run --rm web bin/rspec spec/services/discussion_thread_summarizer/regeneration_rate_limiter_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; **50 examples, 0 failures, 1 skipped** (15.09 s seed 1; also verified seeds 13659, 511). |
+| Pull request | [PR #92](https://github.com/ejgdr/canvas-lms/pull/92) — squash-merged at `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011` on 2026-05-27T21:00:03Z |
+| Board status timeline | Done: 2026-05-27T21:00:05Z (auto-closed by PR #92); QA Status → Pass: 2026-05-27T21:00:16Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9LM`) |
+
+*Last verified (Cycle 18 row): 2026-05-27 against squash-merge `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011`*
+
+---
+
+*Last verified: 2026-05-27 against squash-merge aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011*

@@ -294,4 +294,24 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 3db30731b6ece2d75408ad331c6ec0a84fac00e4*
+## Cycle 18 — Regeneration rate limiter (issue #18, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#18](https://github.com/ejgdr/canvas-lms/issues/18) — "[M3] Regeneration rate limiter." Branch `feat/m3-rate-limiter`. |
+| Classification | Behavior-changing application code — `RegenerationRateLimiter.check` + `fetch_or_create_summary` miss-path gate + three `rate_limit.*` metrics. |
+| Hygiene | *Last verified* stamp for Cycle 18 row references impl merge `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011`. [#18](https://github.com/ejgdr/canvas-lms/issues/18) re-scoped pipeline-only before branch; InstLLMHelper fail-closed posture matched at `inst_llm_helper.rb:41`. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/regeneration_rate_limiter_spec.rb` (new, 10 unit + 1 skip): cooldown deny; two threads / two users allowed; quota deny + DECR rollback; cooldown TTL via `travel_to`; UTC day boundary; rekey → no Redis `set`/`incr`; flag off; cooldown-before-quota (no INCR on cooldown deny); rollback parity; Redis-disabled raise. `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (+3): `:rate_limited` on cooldown/quota deny without `summarize`; `rate_limit.allowed` before summarize. |
+| Command | `docker compose run --rm web bin/rspec spec/services/discussion_thread_summarizer/regeneration_rate_limiter_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; **50 examples, 0 failures, 1 skipped** (15.09 s, seed 1; also seeds 13659, 511). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #92](https://github.com/ejgdr/canvas-lms/pull/92), squash-merged at `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011` |
+| Trace to plan | FR-7 — rate-limit regeneration; pipeline deny contract (`:rate_limited`) for #84 render-path to consume; rekey path (Cycle 17) must not consume budget. |
+| Board transitions | Done 2026-05-27T21:00:05Z; QA Pass 2026-05-27T21:00:16Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9LM`) |
+| Spec-idiom note | `Time.utc` required instead of `Time.zone.utc` for `travel_to` anchors (fixed after initial failures). |
+
+*Last verified (Cycle 18 row): 2026-05-27 against squash-merge `aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011`*
+
+---
+
+*Last verified: 2026-05-27 against squash-merge aed2b119be5eb1c895b0c6cc6dad64fd1c5e8011*
