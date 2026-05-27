@@ -458,6 +458,9 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb --format documentation` |
 | Outcome | Exit code 0; **3 examples, 0 failures** (14.23 seconds, seed 16860). First run: 1 failure — `Delayed::Worker` emits non-JSON `[STAT]` lines through `Rails.logger.info` during job execution; `logged_payloads.last` was one of those, not the audit record. Fix: filter `logged_payloads` for entry containing `"generation_attempt"` string before parsing JSON. Second run: 3/3. |
 | Pull request | [PR #78](https://github.com/ejgdr/canvas-lms/pull/78) — squash-merged at `3464a8953cb1002113c6145b01c640740bf25797` on 2026-05-27T03:19:09Z |
+| Evidence PR | [PR #79](https://github.com/ejgdr/canvas-lms/pull/79) — squash-merged at `f8673075497cbabcdfcf543c6286e5a3c85c2e66` on 2026-05-27T03:20:51Z |
+| Board status timeline | In Progress → Done at 2026-05-27T03:21Z (GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9JE`) |
+| QA Status transition | Pending → Pass at 2026-05-27T03:21Z (GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9JE`) |
 
 ---
 

@@ -238,6 +238,7 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 | `QA Status` | `Pass` |
 | PR / commit | [PR #78](https://github.com/ejgdr/canvas-lms/pull/78), squash-merged at `3464a8953cb1002113c6145b01c640740bf25797` |
 | Trace to plan | FR-1 (generate on demand) — the integration test is the living proof that the M2 async pipeline is end-to-end functional: enqueue_for → Delayed Job → SummarizationService#summarize → StubModelClient → audit log. AC2 (DiscussionTopicSummary record) deferred to M3 slice #16. |
+| Board transitions | In Progress → Done at 2026-05-27T03:21Z; QA Status Pending → Pass at 2026-05-27T03:21Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9JE`) |
 
 ---
 
