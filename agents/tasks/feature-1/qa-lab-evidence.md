@@ -177,4 +177,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-26 against commit 32b38f84a55d*
+## Cycle 11 — Audit log emission (issue #12, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#12](https://github.com/ejgdr/canvas-lms/issues/12) — "[M2] Audit log emission: LLMResponse-style record per generation attempt." Branch `feat/m2-audit-log-emission`. |
+| Classification | Behavior-changing application code — `SummarizationService#summarize` gains an `ensure` block that emits an audit log on every invocation. Six new spec examples directly exercise the emit path under success, schema violation, transport error, unexpected exception, single-record invariant, and PII-guard conditions. |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (modified) — shared `before` block updated with autoload trigger and logger stub; `let(:malformed_client)` hoisted to outer scope; `context "audit log emission"` added with 6 examples: (1) success → `success: true`, all 7 fields present; (2) schema violation → `success: false, error_category: "schema_invalid"`, re-raises; (3) transport error → `success: false, error_category: "transport_error"`, re-raises; (4) unexpected `StandardError` → `success: false, error_category: "unknown"`, re-raises; (5) exactly one logger call per attempt; (6) no raw entry content or author names in logged record. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; **18 examples, 0 failures** (finished in 1.17 seconds, seed 47643). First run: 1 failure (autoload race on `SchemaViolationError`). Second run after fix: 18/18. |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #70](https://github.com/ejgdr/canvas-lms/pull/70), squash-merged at `f10558c656d7` |
+| Trace to plan | NFR-2 (observability) — every outbound model call is logged with thread id, byte size, scope mode, model identifier, and latency. Raw payloads and author names are never logged. AC #1 (exactly one record per attempt regardless of outcome) guaranteed by `ensure`; AC #2 (`success: false` on any failure) guaranteed by `$!` global in `ensure`. |
+
+**First-run failure note.** Example "schema violation emits audit record…" failed with `NameError: uninitialized constant DiscussionThreadSummarizer::SchemaViolationError`. Root cause: RSpec evaluates `raise_error(SomeClass)` as an argument before the block runs, so the constant must already be loaded. Zeitwerk hadn't lazy-loaded `output_schema_validator.rb` yet because the audit-log "schema violation" example ran before any example that called `OutputSchemaValidator.call`. Fix: added `DiscussionThreadSummarizer::OutputSchemaValidator` reference to the shared `before` block to force autoload before any example evaluates the constant. Not a flake — deterministic load-order dependency.
+
+---
+
+*Last verified: 2026-05-27 against commit f10558c656d7*
