@@ -489,4 +489,28 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge dfa1bd32b0406005cb2086d161e7e96e44d16121*
+---
+
+## Cycle 16 — Cache read/write in summarization pipeline (issue #16, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#16](https://github.com/ejgdr/canvas-lms/issues/16) — "[M3] Cache read/write in summarization pipeline (fetch_or_create_summary)." Branch `feat/m3-cache-read-write`. |
+| Issue split | Original #16 mixed pipeline + render-path ACs. Before implementation, #16 body was narrowed to pipeline-only; render ACs moved to [#84](https://github.com/ejgdr/canvas-lms/issues/84). Cycle 16 closes #16 only — **not** #84. |
+| Classification | Behavior-changing application code — `SummarizationService#fetch_or_create_summary`, `LLM_CONFIG_VERSION`, `CacheResult`, private lookup/persist helpers; `enqueue_for` dispatches cache-aware path. |
+| Files changed | `app/services/discussion_thread_summarizer/summarization_service.rb` (+67 lines); `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (+129 lines, 9 DB-backed cache examples in separate top-level describe); `spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb` (+12 lines, AC2 assertion). Net **+201 / -7** (under 250 tripwire). |
+| Constants / types | `LLM_CONFIG_VERSION = "thread-summarizer-v1"`; `CacheResult = Struct.new(:status, :record, :result, keyword_init: true)` |
+| 4-tuple WHERE rationale | Lookup uses `(llm_config_version, dynamic_content_hash, parent_id, locale)` on `discussion_topic.summaries`. Cycle 15's `ContentVersionHash` is locale-agnostic, so `locale` is a **separate column** in the WHERE — departing from issue #16's original 3-tuple wording, documented in the re-scoped issue body. |
+| Cache key | Stores `ContentVersionHash.call(topic)` directly in `dynamic_content_hash` (tuple approach A). Precedent: `DiscussionTopicsApiController#fetch_or_create_summary` at `app/controllers/discussion_topics_api_controller.rb:1348–1368`. |
+| scope_limited follow-up | Backlog [#85](https://github.com/ejgdr/canvas-lms/issues/85) — cache lookup comment in `#find_cached_summary` references this URL. Flag is `state: hidden` on RootAccount with no dev/ci override; safe while flag remains off. |
+| `#summarize` visibility | Stays **public** for existing unit tests; `fetch_or_create_summary` is the cache-aware production path. Converge to private `#summarize` in a future cleanup cycle — not Cycle 16. |
+| Tests added | 9 cache examples + 1 integration AC2 assertion; `enqueue_for` spec updated for `fetch_or_create_summary`. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb spec/services/discussion_thread_summarizer/integration/async_summarization_spec.rb --format documentation` |
+| Outcome | Exit code 0; **38 examples, 0 failures** (finished in 13.63 seconds, seed 60703). First run after fixes: all green. |
+| Pull request | [PR #86](https://github.com/ejgdr/canvas-lms/pull/86) — squash-merged at `1f8256d4682c801efd00365ca89d9e417dd17096` on 2026-05-27T18:18:04Z |
+| Evidence PR | (pending merge — `docs/cycle-16-evidence-records`) |
+| Board status timeline | Todo → Done: 2026-05-27T18:18:04Z (auto-closed by PR #86); QA Status → Pass: 2026-05-27T18:19:19Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9J8`) |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 1f8256d4682c801efd00365ca89d9e417dd17096*
