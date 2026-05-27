@@ -76,6 +76,26 @@ describe DiscussionThreadSummarizer::Metrics do
     end
   end
 
+  describe ".increment_invalidation_fired" do
+    it "emits discussion_thread_summarizer.invalidation.fired with account_id and cause tags" do
+      described_class.increment_invalidation_fired(cause: "edit", account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.invalidation.fired",
+        tags: { account_id: 10_000_000_000_001, cause: "edit" }
+      )
+    end
+  end
+
+  describe ".increment_invalidation_skipped_below_threshold" do
+    it "emits discussion_thread_summarizer.invalidation.skipped_below_threshold with account_id tag" do
+      described_class.increment_invalidation_skipped_below_threshold(account:)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.invalidation.skipped_below_threshold",
+        tags: { account_id: 10_000_000_000_001 }
+      )
+    end
+  end
+
   describe ".increment_report_submission" do
     it "emits discussion_thread_summarizer.report.submission with account_id, reason_category, and reporter_role tags" do
       described_class.increment_report_submission(

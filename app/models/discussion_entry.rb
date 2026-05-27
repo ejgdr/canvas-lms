@@ -67,6 +67,7 @@ class DiscussionEntry < ApplicationRecord
   after_create :log_discussion_entry_metrics
   after_create :clear_planner_cache_for_participants
   after_create :update_topic
+  after_create :schedule_thread_summary_cache_invalidation_on_create
   after_destroy :remove_pin
   after_save :update_discussion
   after_save :context_module_action_later
@@ -266,8 +267,40 @@ class DiscussionEntry < ApplicationRecord
         dt = dt.root_topic
         break if dt.blank?
       end
-      self.class.connection.after_transaction_commit { discussion_topic.update_materialized_view }
+      self.class.connection.after_transaction_commit do
+        discussion_topic.update_materialized_view
+        consider_thread_summary_cache_invalidation
+      end
     end
+  end
+
+  def schedule_thread_summary_cache_invalidation_on_create
+    return unless workflow_state == "active"
+    return unless thread_summarizer_enabled?
+
+    self.class.connection.after_transaction_commit do
+      DiscussionThreadSummarizer::CacheInvalidation.handle_entry_created(self)
+    end
+  end
+
+  def consider_thread_summary_cache_invalidation
+    return unless thread_summarizer_enabled?
+
+    if saved_change_to_workflow_state? && workflow_state == "deleted"
+      DiscussionThreadSummarizer::CacheInvalidation.handle_entry_deleted(self)
+    elsif saved_change_to_message? && !previously_new_record? && workflow_state == "active"
+      message_before, message_after = saved_change_to_message
+      DiscussionThreadSummarizer::CacheInvalidation.handle_entry_updated(
+        self,
+        message_before:,
+        message_after:
+      )
+    end
+  end
+
+  def thread_summarizer_enabled?
+    course = discussion_topic&.context
+    course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
   end
 
   def create_discussion_entry_versions

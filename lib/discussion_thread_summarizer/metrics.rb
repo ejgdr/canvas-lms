@@ -71,6 +71,23 @@ module DiscussionThreadSummarizer
       )
     end
 
+    # Emitted when a meaningful entry change orphans cached summaries (hash mismatch).
+    # cause: one of "create", "edit", "delete"
+    def self.increment_invalidation_fired(cause:, account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.invalidation.fired",
+        tags: { account_id: account.global_id, cause: }
+      )
+    end
+
+    # Emitted when a below-threshold message edit rekeys rows without invalidation.
+    def self.increment_invalidation_skipped_below_threshold(account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.invalidation.skipped_below_threshold",
+        tags: { account_id: account.global_id }
+      )
+    end
+
     # Emitted when a user submits an inaccuracy report against a summary.
     # reason_category: one of "inaccurate", "missed_viewpoint",
     #                  "harmful_content", "other"
