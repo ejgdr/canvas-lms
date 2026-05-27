@@ -483,7 +483,7 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/content_version_hash_spec.rb --format documentation` |
 | Outcome | Exit code 0; **9 examples, 0 failures** (finished in 7.82 seconds, seed 28253). First run: all green. |
 | Pull request | [PR #81](https://github.com/ejgdr/canvas-lms/pull/81) — squash-merged at `dfa1bd32b0406005cb2086d161e7e96e44d16121` on 2026-05-27T17:35:18Z |
-| Evidence PR | (pending merge — see `docs/cycle-15-evidence-records` branch) |
+| Evidence PR | [PR #82](https://github.com/ejgdr/canvas-lms/pull/82) — squash-merged at `b8d672e0c43cbc49dbc788c4798ddfb5c74f666d` on 2026-05-27T17:39:33Z |
 | Board status timeline | Todo → Done: 2026-05-27T17:35:18Z (auto-closed by PR #81 merge); QA Status → Pass: 2026-05-27T17:38:26Z (GraphQL update on item `PVTI_lAHOBQJOSM4BWez_zgrp9Jk`) |
 | QA Status transition | Pending → Pass at 2026-05-27T17:38:26Z |
 
