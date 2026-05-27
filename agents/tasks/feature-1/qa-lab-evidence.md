@@ -277,4 +277,21 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 1f8256d4682c801efd00365ca89d9e417dd17096*
+## Cycle 17 — Cache invalidation hooks + meaningful-change threshold (issue #17, M3)
+
+| Field | Content |
+|---|---|
+| Slice | [#17](https://github.com/ejgdr/canvas-lms/issues/17) — "[M3] Cache invalidation hooks + meaningful-change threshold." Branch `feat/m3-invalidation-hooks`. |
+| Classification | Behavior-changing application code — `CacheInvalidation` service + `DiscussionEntry` after_create/after_save hooks + invalidation metrics. |
+| Hygiene | *Last verified* stamp in both evidence files references Cycle 16 impl SHA `1f8256d4682c801efd00365ca89d9e417dd17096`. #84 reopened (was Closed unintentionally post–Cycle 16). |
+| Tests added or updated | `spec/services/discussion_thread_summarizer/cache_invalidation_spec.rb` (new, 10 examples): create → `invalidation.fired` cause create; above-threshold edit → fired cause edit, stale hash preserved; below-threshold edit → `skipped_below_threshold` + rekey; soft-delete → fired cause delete; editor_id-only → no invalidation metrics; flag off → no metrics/rekey; below-threshold rekey → `fetch_or_create_summary` :hit; soft-delete on `destroy`; rekey → no `summarize`/job; multi-locale rekey. `spec/lib/discussion_thread_summarizer/metrics_spec.rb` (+2 invalidation metric examples). |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/cache_invalidation_spec.rb spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
+| Outcome | Exit code 0; **18 examples, 0 failures** (8.13 seconds, seed 43247). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #89](https://github.com/ejgdr/canvas-lms/pull/89), squash-merged at `3db30731b6ece2d75408ad331c6ec0a84fac00e4` |
+| Trace to plan | FR-2 — invalidate summaries on meaningful thread change; below-threshold edits rekey without regeneration per re-scoped #17 AC. |
+| Board transitions | Done 2026-05-27T19:40:51Z; QA Pass 2026-05-27T19:42:19Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9Kc`) |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 3db30731b6ece2d75408ad331c6ec0a84fac00e4*
