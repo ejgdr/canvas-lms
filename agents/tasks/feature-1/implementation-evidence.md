@@ -423,4 +423,20 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 5d71ab9c955ecd407470cfcf9b2f83f94ed850f6*
+## Cycle 13 — Cross-cutting pipeline seam unit tests (issue #13, M2)
+
+| Field | Content |
+|---|---|
+| Slice | [#13](https://github.com/ejgdr/canvas-lms/issues/13) — "[M2] Unit tests: summarization service (pseudonymization, scope filter, schema validation, ...)." Branch `test/m2-summarization-service-consolidation-unit-tests`. |
+| Classification | Behavior-changing (spec-only) — 4 new examples exercise cross-cutting seams; `transport_client` hoisted to outer scope. No production code changes. |
+| Files changed | `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (+117 lines, -8 lines). |
+| AC coverage | AC1 (pseudonyms in payload): already covered by Cycle 8; seam version adds value. AC2 (scope filter): already covered by Cycle 9; seam version adds value. AC3 (malformed response, no cache write): schema violation covered; "no cache write" is M3 (DiscussionTopicSummary not yet implemented — deferred to slice #16). AC4 (DiscussionTopicSummary write): M3 scope — requires production code not yet present; deferred. AC5 (no network calls): satisfied by StubModelClient throughout. |
+| Async bridge test | Deferred to slice #14 — `instance_double` objects cannot be YAML-marshaled into Delayed::Job records, so `run_job`/`run_jobs` cannot drive the pipeline from `enqueue_for` in a unit test context. |
+| Tests added | 4 examples in new `context "cross-cutting pipeline seams"`: (1) scope-limited filter + pseudonymize + validate in one `summarize` call; (2) scope-limited + malformed client: `Metrics.increment_failure` and audit `success: false` fire together; (3) transport error: `Metrics.increment_failure` NOT emitted (first explicit negative assertion); (4) idempotence: repeated calls with identical inputs produce identical client payloads. |
+| Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
+| Outcome | Exit code 0; **26 examples, 0 failures** (finished in 1.35 seconds, seed 30855). First run: all green. |
+| Pull request | [PR #75](https://github.com/ejgdr/canvas-lms/pull/75) — squash-merged at `756c7d4422c7f7b49585c318282d47c564a6d7c8` on 2026-05-27T02:38:45Z |
+
+---
+
+*Last verified: 2026-05-27 against squash-merge 756c7d4422c7f7b49585c318282d47c564a6d7c8*
