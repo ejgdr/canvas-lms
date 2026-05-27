@@ -204,9 +204,10 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
 | Outcome | Exit code 0; `22 examples, 0 failures` (finished in 1.39 seconds, seed 44441) |
 | `QA Status` | `Pass` |
-| PR / commit | commit `ec96dae82ea` on branch `feat/m2-async-summarization-job` |
+| PR / commit | [PR #72](https://github.com/ejgdr/canvas-lms/pull/72), squash-merged at `5d71ab9c955ecd407470cfcf9b2f83f94ed850f6` |
 | Trace to plan | FR-1 (generate on demand, not blocking the request) — `enqueue_for` is the async dispatch point. The singleton key per `discussion_topic.id` prevents duplicate jobs for the same thread, satisfying the concurrency-safety requirement. `HIGH_PRIORITY` matches the `insight_generation` precedent, keeping summary jobs in the same queue tier as insight generation. |
+| Board transitions | In Progress → Done at 2026-05-27T02:27Z; QA Status Pending → Pass at 2026-05-27T02:27Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9HE`) |
 
 ---
 
-*Last verified: 2026-05-27 against commit ec96dae82ea*
+*Last verified: 2026-05-27 against squash-merge 5d71ab9c955ecd407470cfcf9b2f83f94ed850f6*
