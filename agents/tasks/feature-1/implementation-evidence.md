@@ -436,6 +436,9 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/summarization_service_spec.rb --format documentation` |
 | Outcome | Exit code 0; **26 examples, 0 failures** (finished in 1.35 seconds, seed 30855). First run: all green. |
 | Pull request | [PR #75](https://github.com/ejgdr/canvas-lms/pull/75) — squash-merged at `756c7d4422c7f7b49585c318282d47c564a6d7c8` on 2026-05-27T02:38:45Z |
+| Evidence PR | [PR #76](https://github.com/ejgdr/canvas-lms/pull/76) — squash-merged at `9f9583f38a47e5ca27c2c75eaa9736c8b4be85b4` on 2026-05-27T02:40:33Z |
+| Board status timeline | In Progress → Done at 2026-05-27T02:41Z (GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9IQ`) |
+| QA Status transition | Pending → Pass at 2026-05-27T02:41Z (GraphQL mutation on item `PVTI_lAHOBQJOSM4BWez_zgrp9IQ`) |
 
 ---
 

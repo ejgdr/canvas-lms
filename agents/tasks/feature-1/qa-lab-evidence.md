@@ -222,6 +222,7 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 | `QA Status` | `Pass` |
 | PR / commit | [PR #75](https://github.com/ejgdr/canvas-lms/pull/75), squash-merged at `756c7d4422c7f7b49585c318282d47c564a6d7c8` |
 | Trace to plan | FR-1 (generate on demand) and FR-5 (scope-limited mode) — the seam tests are the living regression guard for the combined filter → pseudonymize → validate path. AC3 cache-write tail and AC4 deferred to M3 (slice #16); no production code required for the 4 examples added here. |
+| Board transitions | In Progress → Done at 2026-05-27T02:41Z; QA Status Pending → Pass at 2026-05-27T02:41Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9IQ`) |
 
 ---
 
