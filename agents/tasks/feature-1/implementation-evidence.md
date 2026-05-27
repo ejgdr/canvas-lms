@@ -540,7 +540,7 @@ Precedents: `app/models/lti/asset.rb:81,93` and `app/services/rubric_llm_service
 | Command | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/cache_invalidation_spec.rb spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
 | Outcome | Exit code 0; **18 examples, 0 failures** (8.13 seconds, seed 43247). |
 | Pull request | [PR #89](https://github.com/ejgdr/canvas-lms/pull/89) — squash-merged at `3db30731b6ece2d75408ad331c6ec0a84fac00e4` on 2026-05-27T19:40:49Z |
-| Evidence PR | [PR #90](https://github.com/ejgdr/canvas-lms/pull/90) — pending squash-merge on `docs/cycle-17-evidence-records` |
+| Evidence PR | [PR #90](https://github.com/ejgdr/canvas-lms/pull/90) — squash-merged at `4a6bf152ad8c485ae11477e409ba997bcabdbecf` on 2026-05-27T19:48:28Z |
 | Board status timeline | Todo → Done: 2026-05-27T19:40:51Z (auto-closed by PR #89); QA Status → Pass: 2026-05-27T19:42:19Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9Kc`) |
 
 ---
