@@ -30,6 +30,7 @@ import PropTypes from 'prop-types'
 import React, {useContext, useEffect, useState} from 'react'
 import {SearchResultsCount} from '../../components/SearchResultsCount/SearchResultsCount'
 import {ThreadPagination} from '../../components/ThreadPagination/ThreadPagination'
+import {ThreadSummaryBlock} from '../../components/ThreadSummaryBlock/ThreadSummaryBlock'
 import {UPDATE_DISCUSSION_ENTRIES_READ_STATE} from '../../../graphql/Mutations'
 import {useMutation} from '@apollo/client'
 import {View} from '@instructure/ui-view'
@@ -143,6 +144,7 @@ export const DiscussionTopicRepliesContainer = props => {
       padding="mediumSmall mediumSmall large mediumSmall"
       data-testid="discussion-root-entry-container"
     >
+      {ENV.discussion_thread_summarizer_enabled && <ThreadSummaryBlock />}
       {searchTerm && <SearchResultsCount resultsFound={props.discussionTopic.searchEntryCount} />}
       {/* @ts-expect-error TS7006 (typescriptify) */}
       {props.discussionTopic.discussionEntriesConnection.nodes.map(thread => {
