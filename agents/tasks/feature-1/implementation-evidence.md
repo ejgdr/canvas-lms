@@ -667,10 +667,69 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Evidence PR | [PR #101](https://github.com/ejgdr/canvas-lms/pull/101) — squash-merged at `f09febf6e0e905ef664e998be2abf000d99700c2` on 2026-05-27T23:37:04Z |
 | Board status timeline | Issue closed: 2026-05-27T23:35:20Z; Status → Done: 2026-05-27T23:35:21Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9NY` / `183104726`); QA Pass: 2026-05-27T23:36:03Z |
 
-**M3 milestone:** Cycle 20 closes [#20](https://github.com/ejgdr/canvas-lms/issues/20), the M3 observability close-out. M3 fully complete: cycles 15–20 / issues #15, #16, #17, #18, #84, #20.
+**M3 milestone (Cycle 20 row):** Cycle 20 closes [#20](https://github.com/ejgdr/canvas-lms/issues/20) observability gap-fill. Formal test umbrella [#19](https://github.com/ejgdr/canvas-lms/issues/19) closed in Cycle 21.
 
 *Last verified (Cycle 20 row): 2026-05-27 against squash-merge `758f583b07e572e165f8f8f66792c83a36956420`*
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 758f583b07e572e165f8f8f66792c83a36956420*
+## Cycle 21 — M3 unit-test consolidation (issue #19)
+
+**Pre-implementation prerequisites (completed before branch):**
+
+| Step | Result |
+|---|---|
+| [#19](https://github.com/ejgdr/canvas-lms/issues/19) re-scope (Lens A) | AC bullet 2 updated: word-delta invalidation/rekey semantics (#17), not threshold-aware `ContentVersionHash`. AC coverage table added to issue body. |
+| [#95](https://github.com/ejgdr/canvas-lms/issues/95) label hygiene | `milestone:M3` removed; `milestone:M4` applied (title already `[M4]`). No body change. |
+| Lens B follow-up | **Skipped** — bullet 2 treated as pre-implementation speculative wording; shipped behavior stands. |
+
+**M3 milestone scope audit (final, `label:milestone:M3`):**
+
+| # | Title | State after Cycle 21 |
+|---|-------|----------------------|
+| 15 | Content-version hash | Closed |
+| 16 | Cache read/write | Closed |
+| 17 | Invalidation hooks | Closed |
+| 18 | Rate limiter | Closed |
+| 19 | Unit tests (this cycle) | **Closed** |
+| 20 | Observability metrics | Closed |
+| 84 | Render-path API | Closed |
+| 85 | `scope_mode` cache key (backlog) | Open — blocked on scope-limited rollout |
+| 96 | Index backlog (optional perf) | Open — P3 |
+| 95 | Thread summary UI | Open — relabeled **M4** (was mislabeled M3) |
+
+**10 issues** with `milestone:M3` label at audit time → **7 closed** after Cycle 21; **3 remain** (#85, #96 backlog; #95 now M4).
+
+**AC bullet-2 re-scope rationale (Lens A):** Original AC implied reply-count threshold suppresses hash changes. Cycles 15 + 17 shipped: `ContentVersionHash` hashes the full active entry set (any add/edit/delete changes hash); the 5-word `Setting` governs invalidation-vs-rekey on **edits** only. Tests assert shipped semantics; no production change.
+
+**Spec idiom catalog (M4 reference):**
+
+| Idiom | Source |
+|-------|--------|
+| `Time.utc(2026, …)` + `travel N.seconds` | `regeneration_rate_limiter_spec.rb:80-109` |
+| Top-level `describe Class, "#method"` for constant lookup | Cycle 19 `summarization_service_spec.rb` fix |
+| `allow(Canvas).to receive(:redis_enabled?).and_return(true)` | `regeneration_rate_limiter_spec.rb:29`; `inst_llm_helper_spec.rb` |
+| `course.enable_feature!(:discussion_thread_summarizer)` | All DB-backed summarizer specs |
+| `StubModelClient.new` — no network | Entire summarizer spec tree |
+| Redis `set` nx/ex + `incr` stubs for E2E cooldown | `m3_invariants_spec.rb`; limiter spec `:41-48` |
+
+**Diff vs cap:** +179 lines (1 new file). **Under** 200 soft / 250 hard.
+
+| Field | Content |
+|---|---|
+| Slice | [#19](https://github.com/ejgdr/canvas-lms/issues/19) — test consolidation. Branch `feat/m3-test-consolidation`. |
+| Files changed | `spec/services/discussion_thread_summarizer/m3_invariants_spec.rb` (+179). |
+| Tripwires | No production code, controllers, flags, migrations; no spec moves/renames; PR closes **#19 only**. |
+| Tests added | 6 examples in `m3_invariants_spec.rb` (AC index comment + hash / threshold / cooldown E2E). |
+| Command | `bin/rspec spec/services/discussion_thread_summarizer/m3_invariants_spec.rb` — 6 examples, 0 failures, seed 40363, ~6.27 s |
+| Regression | `bin/rspec spec/services/discussion_thread_summarizer/ spec/lib/discussion_thread_summarizer/` — 127 examples, 0 failures, 1 pending, seed 8371, ~44.94 s |
+| Pull request | [PR #103](https://github.com/ejgdr/canvas-lms/pull/103) — squash-merged at `1d535bafdca18a58c6103029e9904313430f4c81` on 2026-05-28T00:10:09Z |
+| Board status timeline | Issue closed: 2026-05-28T00:10:10Z; Status → Done: 2026-05-28T00:10:12Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9M8` / `183104719`); QA Pass: 2026-05-28T00:10:42Z |
+
+**M3 milestone closure marker:** M3 implementation + render API + observability + test consolidation: **complete**. M3 labels remaining: [#85](https://github.com/ejgdr/canvas-lms/issues/85) (backlog), [#96](https://github.com/ejgdr/canvas-lms/issues/96) (backlog). [#95](https://github.com/ejgdr/canvas-lms/issues/95) relabeled to M4. Phase 1 M3 deliverables done; M4 next (#95 React/UI).
+
+*Last verified (Cycle 21 row): 2026-05-28 against squash-merge `1d535bafdca18a58c6103029e9904313430f4c81`*
+
+---
+
+*Last verified: 2026-05-28 against squash-merge 1d535bafdca18a58c6103029e9904313430f4c81*
