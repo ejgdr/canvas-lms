@@ -724,6 +724,7 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Command | `bin/rspec spec/services/discussion_thread_summarizer/m3_invariants_spec.rb` — 6 examples, 0 failures, seed 40363, ~6.27 s |
 | Regression | `bin/rspec spec/services/discussion_thread_summarizer/ spec/lib/discussion_thread_summarizer/` — 127 examples, 0 failures, 1 pending, seed 8371, ~44.94 s |
 | Pull request | [PR #103](https://github.com/ejgdr/canvas-lms/pull/103) — squash-merged at `1d535bafdca18a58c6103029e9904313430f4c81` on 2026-05-28T00:10:09Z |
+| Evidence PR | [PR #104](https://github.com/ejgdr/canvas-lms/pull/104) — squash-merged at `fc87532e1a6f4b38f18852e7341e1898ef6a3b98` |
 | Board status timeline | Issue closed: 2026-05-28T00:10:10Z; Status → Done: 2026-05-28T00:10:12Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9M8` / `183104719`); QA Pass: 2026-05-28T00:10:42Z |
 
 **M3 milestone closure marker:** M3 implementation + render API + observability + test consolidation: **complete**. M3 labels remaining: [#85](https://github.com/ejgdr/canvas-lms/issues/85) (backlog), [#96](https://github.com/ejgdr/canvas-lms/issues/96) (backlog). [#95](https://github.com/ejgdr/canvas-lms/issues/95) relabeled to M4. Phase 1 M3 deliverables done; M4 next (#95 React/UI).
