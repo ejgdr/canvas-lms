@@ -352,4 +352,25 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-27 against squash-merge 758f583b07e572e165f8f8f66792c83a36956420*
+## Cycle 21 — M3 unit-test consolidation (issue #19)
+
+| Field | Content |
+|---|---|
+| Slice | [#19](https://github.com/ejgdr/canvas-lms/issues/19) — test consolidation. Branch `feat/m3-test-consolidation`. |
+| Classification | Test-only — `m3_invariants_spec.rb` (6 examples). No production code. |
+| Hygiene | Lens A re-scope on #19 before branch; #95 `milestone:M3` → `milestone:M4`. |
+| Tests added | `spec/services/discussion_thread_summarizer/m3_invariants_spec.rb` (new, 179 lines): AC index comment; hash stability; word-delta invalidation/rekey; cooldown E2E with Redis stubs; post-TTL summarize. |
+| Command (targeted) | `docker compose run --rm web bin/rspec spec/services/discussion_thread_summarizer/m3_invariants_spec.rb` |
+| Outcome (targeted) | **6 examples, 0 failures** (~6.27 s, seed 40363). |
+| Command (regression) | `docker compose run --rm web bin/rspec spec/services/discussion_thread_summarizer/ spec/lib/discussion_thread_summarizer/` |
+| Outcome (regression) | **127 examples, 0 failures, 1 pending** (~44.94 s, seed 8371). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #103](https://github.com/ejgdr/canvas-lms/pull/103), squash-merged at `1d535bafdca18a58c6103029e9904313430f4c81` |
+| Board transitions | Closed 2026-05-28T00:10:10Z; Done 2026-05-28T00:10:12Z; QA Pass 2026-05-28T00:10:42Z (item `PVTI_lAHOBQJOSM4BWez_zgrp9M8` / `183104719`) |
+| AC bullet-2 note | Lens A: pre-implementation wording; shipped hash is full entry-set; threshold is invalidation/rekey only. |
+
+*Last verified (Cycle 21 row): 2026-05-28 against squash-merge `1d535bafdca18a58c6103029e9904313430f4c81`*
+
+---
+
+*Last verified: 2026-05-28 against squash-merge 1d535bafdca18a58c6103029e9904313430f4c81*
