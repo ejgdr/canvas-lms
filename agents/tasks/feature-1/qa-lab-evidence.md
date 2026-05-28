@@ -373,4 +373,25 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
-*Last verified: 2026-05-28 against squash-merge 1d535bafdca18a58c6103029e9904313430f4c81*
+## Cycle 22 — M4 thread summary UI (issue #95)
+
+| Field | Content |
+|---|---|
+| Slice | [#95](https://github.com/ejgdr/canvas-lms/issues/95) — `ThreadSummaryBlock`. Branch `feat/m4-thread-summary-ui`. |
+| Classification | New React UI — `GET thread_summary` consumer with polling hook; no backend changes. |
+| Hygiene | #95 re-scoped; #22 closed duplicate before branch; M4 audit unchanged (8 issues). |
+| Tests added | `ThreadSummaryBlock.test.tsx` (7 RTL+MSW), `formatThreadSummary.test.ts` (2), `useThreadSummary.test.ts` (3 poll-interval). |
+| Command (targeted) | `yarn test ui/features/discussion_topics_post/react/components/ThreadSummaryBlock` |
+| Outcome (targeted) | **12 examples, 0 failures** (~10.6 s, seed `1779928118029`). |
+| Command (regression) | `yarn test ui/features/discussion_topics_post/` |
+| Outcome (regression) | **776 passed, 3 skipped** (~366.9 s). |
+| `QA Status` | `Pass` |
+| PR / commit | [PR #106](https://github.com/ejgdr/canvas-lms/pull/106), squash-merged at `186a92f5e4231065a29f187e805d128eb30b6dcf` |
+| Board transitions | Closed 2026-05-28T01:02:05Z; Done 2026-05-28T01:02:43Z; QA Pass 2026-05-28T01:02:59Z (item `PVTI_lAHOBQJOSM4BWez_zgt__hA` / `192937488`) |
+| Diff cap | **623 vs 500 hard** — overage surfaced; 282 lines test overhead. |
+
+*Last verified (Cycle 22 row): 2026-05-28 against squash-merge `186a92f5e4231065a29f187e805d128eb30b6dcf`*
+
+---
+
+*Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*

@@ -733,4 +733,68 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 
 ---
 
-*Last verified: 2026-05-28 against squash-merge 1d535bafdca18a58c6103029e9904313430f4c81*
+## Cycle 22 — M4 thread summary UI (issue #95)
+
+**Pre-implementation prerequisites (completed before branch):**
+
+| Step | Result |
+|---|---|
+| [#95](https://github.com/ejgdr/canvas-lms/issues/95) re-scope | Cycle 22 slice: `GET thread_summary` only, visual states, 5s/30s polling, basic a11y/i18n. Manual refresh → #23; collapse → follow-up; #21 embed, #24 gate, #27 metrics, #46 WCAG out. |
+| [#22](https://github.com/ejgdr/canvas-lms/issues/22) closed as duplicate | Comment references re-scoped #95 body; `ThreadSummaryBlock` lives in #95. |
+| M4 audit re-run (`label:milestone:M4`) | 8 issues; no new filings since Checkpoint 1. |
+
+**M4 milestone scope audit (final, `label:milestone:M4`):**
+
+| # | Title | State after Cycle 22 |
+|---|-------|------------------------|
+| 95 | Thread summary UI (this cycle) | **Closed** |
+| 22 | SummaryBlock component (duplicate) | **Closed** (duplicate of #95, prerequisite) |
+| 24 | Must-post-before-replies gate | Open — **next** (with #26) |
+| 26 | Permission gating unit tests | Open — **next** (with #24) |
+| 23 | Regenerate + manual refresh UX | Open |
+| 21 | REST/GraphQL additive fields | Open |
+| 25 | Integration test response shapes | Open |
+| 27 | Generation latency metrics | Open |
+
+**8 issues** at audit time → **2 closed** after Cycle 22 (#95, #22 duplicate); **6 remain**. Sequencing: **#24 + #26** → **#23** → **#21** → **#25** → **#27**.
+
+**#95 re-scope summary (deferred items):**
+
+| Deferred | Target |
+|----------|--------|
+| Manual refresh button | [#23](https://github.com/ejgdr/canvas-lms/issues/23) |
+| Regenerate action + cooldown UX | [#23](https://github.com/ejgdr/canvas-lms/issues/23) |
+| Collapse UX | follow-up |
+| REST/GraphQL embed on topic payload | [#21](https://github.com/ejgdr/canvas-lms/issues/21) |
+| Must-post-before-replies enforcement | [#24](https://github.com/ejgdr/canvas-lms/issues/24) |
+| Latency telemetry | [#27](https://github.com/ejgdr/canvas-lms/issues/27) |
+| Full WCAG audit | [#46](https://github.com/ejgdr/canvas-lms/issues/46) |
+
+**JS spec-idiom catalog (M4 — first cycle contribution):**
+
+- **MSW path matchers** — string path `/api/v1/courses/:courseId/discussion_topics/:topicId/thread_summary` (query params ignored by MSW); mirror `DiscussionSummary2.test.tsx` `setupServer` + `http.get` + `HttpResponse.json`.
+- **Partial fake timers** — `vi.useFakeTimers({toFake: ['setInterval', 'clearInterval']})` so `doFetchApi`/MSW stay real; `vi.useRealTimers()` in `afterEach`.
+- **`act()` around timer advances** — `vi.advanceTimersByTimeAsync(5000)` wrapped in `act()` for generating → current poll transitions.
+- **`fakeENV`** — `ENV.discussion_thread_summarizer_enabled`, `context_type`, `context_id`, `discussion_topic_id`, `LOCALE` per container test precedent.
+- **`data-testid` over `getByText`** — stable queries across i18n strings (`thread-summary-generating`, `thread-summary-stale-alert`, etc.).
+- **`pollIntervalForStatus()` extraction** — exported from `useThreadSummary.ts` for hook unit tests (5s / 30s / null) without full RTL timer churn.
+- **AbortController + `clearInterval` cleanup contract** — both fire on unmount and dependency changes; documented in hook header comment; canonical pattern for future M4 hooks.
+
+**Polling intervals:** 5s for `:generating`; 30s for `:stale` and `:rate_limited_stale`; none for `:current`, `:disabled`, `:rate_limited_empty`. Conservative vs aggressive polling to limit API load while background regeneration may still complete; stale states may refresh server-side without user action.
+
+**Diff vs cap:** +623 insertions (7 files). **Over** 500 hard / 400 soft (~25% over hard cap). **282 of 623** are MSW/RTL test code (`ThreadSummaryBlock.test.tsx` ~205, `formatThreadSummary.test.ts` ~37, `useThreadSummary.test.ts` ~40) — realistic per-example overhead for visual + interaction + polling coverage; surfaced in PR #106 body, not absorbed silently.
+
+| Field | Content |
+|---|---|
+| Slice | [#95](https://github.com/ejgdr/canvas-lms/issues/95) — `ThreadSummaryBlock`. Branch `feat/m4-thread-summary-ui`. |
+| Files added | `ThreadSummaryBlock.tsx`, `useThreadSummary.ts`, `formatThreadSummary.ts`; tests under `__tests__/`; `DiscussionTopicRepliesContainer.tsx` (+2). |
+| Tripwires | No Ruby/backend; frozen JSON contract; existing `discussion_thread_summarizer` js_env only; no metrics/deps; no legacy `DiscussionSummary`; no refresh/regenerate/collapse; PR closes **#95 only**. |
+| Tests | 12 examples in `ThreadSummaryBlock/` (seed `1779928118029`); regression `discussion_topics_post/` 776 passed, 3 skipped. |
+| Pull request | [PR #106](https://github.com/ejgdr/canvas-lms/pull/106) — squash-merged at `186a92f5e4231065a29f187e805d128eb30b6dcf` on 2026-05-28T01:02:03Z |
+| Board status timeline | Issue closed: 2026-05-28T01:02:05Z (`closes #95`); project item add: 2026-05-28T01:02:28Z; Status → Done: 2026-05-28T01:02:43Z (item `PVTI_lAHOBQJOSM4BWez_zgt__hA` / `192937488`); QA Pass: 2026-05-28T01:02:59Z |
+
+*Last verified (Cycle 22 row): 2026-05-28 against squash-merge `186a92f5e4231065a29f187e805d128eb30b6dcf`*
+
+---
+
+*Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*
