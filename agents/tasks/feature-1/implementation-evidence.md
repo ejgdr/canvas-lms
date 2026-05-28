@@ -798,3 +798,20 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 ---
 
 *Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*
+
+---
+
+## Cycle 22 completion record
+
+| Step | PR | Merge SHA | Timestamp (UTC) |
+|------|----|-----------|-----------------|
+| Implementation | [#106](https://github.com/ejgdr/canvas-lms/pull/106) | `186a92f5e4231065a29f187e805d128eb30b6dcf` | 2026-05-28T01:02:03Z |
+| Issue #95 closed | `closes #95` on PR #106 | — | 2026-05-28T01:02:05Z |
+| Board: Status → Done | GraphQL item `192937488` | — | 2026-05-28T01:02:43Z |
+| Board: QA Status → Pass | GraphQL item `192937488` | — | 2026-05-28T01:02:59Z |
+| Evidence records | [#107](https://github.com/ejgdr/canvas-lms/pull/107) | `f2cd7a220c01d3b51900eafd9515833228d606be` | 2026-05-28T01:03:49Z |
+| Spec (targeted) | 12/12 pass, seed `1779928118029` | — | Cycle 22 impl QA |
+| Spec (regression) | 776 passed, 3 skipped | — | Cycle 22 impl QA |
+| Evidence completion | [#108](https://github.com/ejgdr/canvas-lms/pull/108) | (squash-merge SHA) | (squash-merge timestamp) |
+
+*Last verified: 2026-05-28 against squash-merge f2cd7a220c01d3b51900eafd9515833228d606be (evidence records); impl row remains `186a92f5e4231065a29f187e805d128eb30b6dcf`.*
