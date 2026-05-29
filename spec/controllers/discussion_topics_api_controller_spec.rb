@@ -1461,7 +1461,8 @@ describe DiscussionTopicsApiController do
       end.to change { Delayed::Job.count }.by_at_least(0)
 
       body = response.parsed_body
-      expect(["generating", "current", "disabled"]).to include(body["status"]) if body
+      expect(body).to be_present
+      expect(body["status"]).to(satisfy { |s| %w[generating current disabled].include?(s) })
     end
   end
 end
