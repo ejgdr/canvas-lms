@@ -1451,18 +1451,21 @@ describe DiscussionTopicsApiController do
     end
 
     it "returns normal summary generation/enqueue for a posted, readable viewer" do
-      # ensure the student has posted so initial-post gate won't block
+      @topic.update!(require_initial_post: true)
+
+      # satisfy the must-post-first gate for this viewer
       @topic.discussion_entries.create!(user: @student, message: "student message")
 
       expect do
         get "thread_summary",
             params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
             format: "json"
-      end.to change { Delayed::Job.count }.by_at_least(0)
+      end.to change { Delayed::Job.count }.by(1)
 
       body = response.parsed_body
+      expect(response).not_to have_http_status(:forbidden)
       expect(body).to be_present
-      expect(body["status"]).to(satisfy { |s| %w[generating current disabled].include?(s) })
+      expect(body["status"]).to eq("generating")
     end
   end
 end
