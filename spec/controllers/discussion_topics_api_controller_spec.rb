@@ -1361,10 +1361,11 @@ describe DiscussionTopicsApiController do
 
   context "thread_summary (Discussion Thread Summarizer)" do
     before do
-      course_with_student(active_all: true)
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
       @course.enable_feature!(:discussion_thread_summarizer)
-      @topic = @course.discussion_topics.create!(title: "discussion")
-      @topic.discussion_entries.create!(user: @student, message: "hello")
+      @topic = @course.discussion_topics.create!(title: "discussion", user: @teacher)
+      @topic.discussion_entries.create!(user: @teacher, message: "hello")
       user_session(@student)
       allow(Canvas).to receive(:redis_enabled?).and_return(true)
       allow(Canvas.redis).to receive(:get).and_return(nil)
@@ -1420,6 +1421,51 @@ describe DiscussionTopicsApiController do
       expect(body["status"]).to eq("generating")
       expect(body["enqueued"]).to be(true)
       expect(body["summary"]).to be_nil
+    end
+
+    it "returns require_initial_post and does not enqueue when the viewer has not posted" do
+      @topic.update!(require_initial_post: true)
+
+      expect do
+        get "thread_summary",
+            params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+            format: "json"
+      end.not_to change { Delayed::Job.count }
+
+      expect(response).to have_http_status :forbidden
+      expect(response.body).to eq "require_initial_post"
+    end
+
+    it "returns unauthorized and does not enqueue when the viewer has no :read access" do
+      outsider = user_factory(active_all: true)
+      user_session(outsider)
+
+      expect do
+        get "thread_summary",
+            params: { topic_id: @topic.id, course_id: @course.id, user_id: outsider.id },
+            format: "json"
+      end.not_to change { Delayed::Job.count }
+
+      expect(response).to have_http_status :forbidden
+      expect(response.parsed_body["status"]).to eq("unauthorized")
+    end
+
+    it "returns normal summary generation/enqueue for a posted, readable viewer" do
+      @topic.update!(require_initial_post: true)
+
+      # satisfy the must-post-first gate for this viewer
+      @topic.discussion_entries.create!(user: @student, message: "student message")
+
+      expect do
+        get "thread_summary",
+            params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+            format: "json"
+      end.to change { Delayed::Job.count }.by(1)
+
+      body = response.parsed_body
+      expect(response).not_to have_http_status(:forbidden)
+      expect(body).to be_present
+      expect(body["status"]).to eq("generating")
     end
   end
 end

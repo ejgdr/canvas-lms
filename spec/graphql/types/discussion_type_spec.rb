@@ -191,6 +191,16 @@ RSpec.shared_examples "DiscussionType" do
     expect(type_with_student.resolve("discussionEntriesConnection { nodes { message } }").count).to eq 2
   end
 
+  it "returns participant summaryEnabled as a preference flag" do
+    participant = discussion.update_or_create_participant(current_user: @teacher)
+
+    participant.update!(summary_enabled: true)
+    expect(discussion_type.resolve("participant { summaryEnabled }")).to be true
+
+    participant.update!(summary_enabled: false)
+    expect(discussion_type.resolve("participant { summaryEnabled }")).to be false
+  end
+
   it "allows querying for entry counts" do
     3.times { discussion.discussion_entries.create!(message: "sub entry", user: @teacher) }
     discussion.discussion_entries.take.destroy
