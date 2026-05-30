@@ -394,4 +394,40 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
+## Cycle 24 — Additive summary fields (issue #21)
+
+| Field | Content |
+|---|---|
+| Slice | [#21](https://github.com/ejgdr/canvas-lms/issues/21) — additive `summary` on DiscussionTopic REST `show`/`view` and GraphQL `Discussion.summary`. Branch `feat/m4-topic-summary-embed`. |
+| Classification | Behavior-changing application code — Ruby REST/GraphQL embed wiring + controller/GraphQL specs. |
+| Tests added / extended | `spec/controllers/discussion_topics_api_controller_spec.rb` (`thread summary embed on show`, `thread summary embed on view`); `spec/graphql/types/discussion_type_spec.rb` (`thread summary embed`). |
+| Command (targeted) | `docker compose exec web bundle exec rspec spec/controllers/discussion_topics_api_controller_spec.rb -e "thread summary embed" spec/graphql/types/discussion_type_spec.rb -e "thread summary embed"` |
+| Outcome (targeted) | **16 examples, 0 failures** (~18.14 s, seed `63338`). |
+| Matrix covered | REST show/view + GraphQL: flag off (omit key / null + shape stability); cached `current`/`stale`; `generating` object; not started (`rate_limited_empty` → null, no job). |
+| `QA Status` | `Pass` (recorded here; board field update deferred to Cycle 24 completion PR) |
+| PR / commit | [PR #112](https://github.com/ejgdr/canvas-lms/pull/112), squash-merged at `132427903290b7c65b81a947daa2965e0f0c4ed9` on 2026-05-30T20:06:56Z |
+| Trace to plan | FR embed on topic payload; reuses `discussion_thread_summarizer` flag and `SummarizationService#lookup_for_render`. |
+
+*Last verified (Cycle 24 row): 2026-05-30T20:07:30Z against squash-merge `132427903290b7c65b81a947daa2965e0f0c4ed9`*
+
+---
+
 *Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*
+
+---
+
+## Cycle 24 — Additive summary fields (issue #21)
+
+| Field | Content |
+|---|---|
+| Slice | [#21](https://github.com/ejgdr/canvas-lms/issues/21) — additive `summary` on DiscussionTopic REST `show`/`view` and GraphQL `Discussion.summary`. Branch `feat/m4-topic-summary-embed`. |
+| Classification | Behavior-changing application code — Ruby REST/GraphQL embed wiring + controller/GraphQL specs. |
+| Tests added / extended | `spec/controllers/discussion_topics_api_controller_spec.rb` (`thread summary embed on show`, `thread summary embed on view`); `spec/graphql/types/discussion_type_spec.rb` (`thread summary embed`). |
+| Command (targeted) | `docker compose exec web bundle exec rspec spec/controllers/discussion_topics_api_controller_spec.rb -e "thread summary embed" spec/graphql/types/discussion_type_spec.rb -e "thread summary embed"` |
+| Outcome (targeted) | **16 examples, 0 failures** (~18.14 s, seed `63338`). |
+| Matrix covered | REST show/view + GraphQL: flag off (omit key / null + shape stability); cached `current`/`stale`; `generating` object; not started (`rate_limited_empty` → null, no job). |
+| `QA Status` | `Pass` (recorded here; board field update deferred to Cycle 24 completion PR) |
+| PR / commit | [PR #112](https://github.com/ejgdr/canvas-lms/pull/112), squash-merged at `132427903290b7c65b81a947daa2965e0f0c4ed9` on 2026-05-30T20:06:56Z |
+| Trace to plan | FR embed on topic payload; reuses `discussion_thread_summarizer` flag and `SummarizationService#lookup_for_render`. |
+
+*Last verified (Cycle 24 row): 2026-05-30T20:07:30Z against squash-merge `132427903290b7c65b81a947daa2965e0f0c4ed9`*
