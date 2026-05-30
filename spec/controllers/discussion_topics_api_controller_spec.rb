@@ -1468,4 +1468,200 @@ describe DiscussionTopicsApiController do
       expect(body["status"]).to eq("generating")
     end
   end
+
+  context "thread summary embed on show" do
+    before do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @topic = @course.discussion_topics.create!(title: "discussion", user: @teacher)
+      @topic.discussion_entries.create!(user: @teacher, message: "hello")
+      user_session(@student)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+    end
+
+    def show_topic
+      get "show",
+          params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+          format: "json"
+    end
+
+    it "omits summary when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+
+      show_topic
+
+      expect(response).to be_successful
+      expect(response.parsed_body).not_to have_key("summary")
+    end
+
+    it "leaves existing keys unchanged when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+      show_topic
+      baseline_keys = response.parsed_body.keys.sort
+
+      @course.enable_feature!(:discussion_thread_summarizer)
+      show_topic
+
+      expect(response.parsed_body.except("summary").keys.sort).to eq baseline_keys
+    end
+
+    it "returns a populated summary when the flag is on and a cache row matches" do
+      locale = I18n.locale.to_s
+      content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic)
+      created_at = 1.hour.ago.change(usec: 0)
+      @topic.summaries.create!(
+        user: @student,
+        locale:,
+        summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+        dynamic_content_hash: content_hash,
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION,
+        created_at:
+      )
+
+      show_topic
+
+      summary = response.parsed_body["summary"]
+      expect(summary["status"]).to eq("current")
+      expect(summary["text"]).to include("Main theme A")
+      expect(summary["generated_at"]).to eq(created_at.iso8601)
+    end
+
+    it "returns a generating summary when the flag is on and no cache row exists" do
+      expect { show_topic }.to change { Delayed::Job.count }.by(1)
+
+      summary = response.parsed_body["summary"]
+      expect(summary["status"]).to eq("generating")
+      expect(summary["text"]).to be_nil
+      expect(summary["generated_at"]).to be_nil
+    end
+
+    it "returns null summary when generation has not started (rate-limited empty)" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:preview)
+        .and_return(:cooldown_denied)
+
+      expect { show_topic }.not_to change { Delayed::Job.count }
+
+      expect(response.parsed_body["summary"]).to be_nil
+    end
+
+    it "returns a stale summary when the cache row is outdated" do
+      locale = I18n.locale.to_s
+      @topic.summaries.create!(
+        user: @student,
+        locale:,
+        summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+        dynamic_content_hash: "outdated-hash",
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+      )
+
+      expect { show_topic }.to change { Delayed::Job.count }.by(1)
+
+      summary = response.parsed_body["summary"]
+      expect(summary["status"]).to eq("stale")
+      expect(summary["text"]).to include("Main theme A")
+    end
+  end
+
+  context "thread summary embed on view" do
+    before do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @topic = @course.discussion_topics.create!(title: "discussion", user: @teacher)
+      @topic.discussion_entries.create!(user: @teacher, message: "hello")
+      user_session(@student)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+      allow_any_instance_of(DiscussionTopic).to receive(:materialized_view)
+        .and_return(["[]", [], [], nil])
+    end
+
+    def view_topic
+      get "view",
+          params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+          format: "json"
+    end
+
+    def parsed_view_body
+      JSON.parse(response.body)
+    end
+
+    it "omits summary when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+
+      view_topic
+
+      expect(response).to be_successful
+      expect(parsed_view_body).not_to have_key("summary")
+    end
+
+    it "leaves existing keys unchanged when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+      view_topic
+      baseline_keys = parsed_view_body.keys.sort
+
+      @course.enable_feature!(:discussion_thread_summarizer)
+      view_topic
+
+      expect(parsed_view_body.except("summary").keys.sort).to eq baseline_keys
+    end
+
+    it "returns a populated summary when the flag is on and a cache row matches" do
+      locale = I18n.locale.to_s
+      content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic)
+      created_at = 1.hour.ago.change(usec: 0)
+      @topic.summaries.create!(
+        user: @student,
+        locale:,
+        summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+        dynamic_content_hash: content_hash,
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION,
+        created_at:
+      )
+
+      view_topic
+
+      summary = parsed_view_body["summary"]
+      expect(summary["status"]).to eq("current")
+      expect(summary["text"]).to include("Main theme A")
+      expect(summary["generated_at"]).to eq(created_at.iso8601)
+    end
+
+    it "returns a generating summary when the flag is on and no cache row exists" do
+      expect { view_topic }.to change { Delayed::Job.count }.by(1)
+
+      summary = parsed_view_body["summary"]
+      expect(summary["status"]).to eq("generating")
+      expect(summary["text"]).to be_nil
+      expect(summary["generated_at"]).to be_nil
+    end
+
+    it "returns null summary when generation has not started (rate-limited empty)" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:preview)
+        .and_return(:cooldown_denied)
+
+      expect { view_topic }.not_to change { Delayed::Job.count }
+
+      expect(parsed_view_body["summary"]).to be_nil
+    end
+
+    it "returns a stale summary when the cache row is outdated" do
+      locale = I18n.locale.to_s
+      @topic.summaries.create!(
+        user: @student,
+        locale:,
+        summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+        dynamic_content_hash: "outdated-hash",
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+      )
+
+      expect { view_topic }.to change { Delayed::Job.count }.by(1)
+
+      summary = parsed_view_body["summary"]
+      expect(summary["status"]).to eq("stale")
+      expect(summary["text"]).to include("Main theme A")
+    end
+  end
 end

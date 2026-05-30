@@ -259,6 +259,15 @@ module Api::V1::DiscussionTopics
     json[:expanded] = topic.expanded
     json[:expanded_locked] = topic.expanded_locked
 
+    if opts[:include_thread_summary]
+      summary_value = DiscussionThreadSummarizer::TopicSummaryEmbed.rest_value(
+        discussion_topic: topic,
+        viewer: user,
+        session:
+      )
+      json[:summary] = summary_value unless summary_value == DiscussionThreadSummarizer::TopicSummaryEmbed::OMIT
+    end
+
     json
   end
 

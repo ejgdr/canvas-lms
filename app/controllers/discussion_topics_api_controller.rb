@@ -84,7 +84,8 @@ class DiscussionTopicsApiController < ApplicationController
                                             include_all_dates: include_params.include?("all_dates"),
                                             include_sections: include_params.include?("sections"),
                                             include_sections_user_count: include_params.include?("sections_user_count"),
-                                            include_overrides: include_params.include?("overrides")).first)
+                                            include_overrides: include_params.include?("overrides"),
+                                            include_thread_summary: true).first)
   end
 
   # @API Find Last Summary
@@ -611,6 +612,14 @@ class DiscussionTopicsApiController < ApplicationController
         view: structure,
         new_entries: json_cast(new_entries).to_json,
       }
+      summary_value = DiscussionThreadSummarizer::TopicSummaryEmbed.rest_value(
+        discussion_topic: @topic,
+        viewer: @current_user,
+        session:
+      )
+      unless summary_value == DiscussionThreadSummarizer::TopicSummaryEmbed::OMIT
+        fragments[:summary] = summary_value.to_json
+      end
       fragments = fragments.map { |k, v| %("#{k}": #{v}) }
       render json: "{ #{fragments.join(", ")} }"
     else
