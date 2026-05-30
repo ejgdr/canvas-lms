@@ -672,6 +672,61 @@ RSpec.shared_examples "DiscussionType" do
 end
 
 describe Types::DiscussionType do
+  context "thread summary embed" do
+    before do
+      course_with_teacher(active_all: true)
+      @discussion = @course.discussion_topics.create!(title: "Summary topic", user: @teacher)
+      @discussion.discussion_entries.create!(user: @teacher, message: "hello")
+      @discussion_type = GraphQLTypeTester.new(@discussion, current_user: @teacher)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+    end
+
+    it "returns null summary when the discussion_thread_summarizer flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+
+      expect(@discussion_type.resolve("summary { status }")).to be_nil
+      expect(@discussion_type.resolve("entryCounts { repliesCount }")).to eq 1
+    end
+
+    it "returns a populated summary when the flag is on and a cache row matches" do
+      @course.enable_feature!(:discussion_thread_summarizer)
+      locale = I18n.locale.to_s
+      content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@discussion)
+      @discussion.summaries.create!(
+        user: @teacher,
+        locale:,
+        summary: DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE.to_json,
+        dynamic_content_hash: content_hash,
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+      )
+
+      expect(@discussion_type.resolve("summary { status }")).to eq "current"
+      expect(@discussion_type.resolve("summary { text }")).to include("Main theme A")
+      expect(@discussion_type.resolve("summary { generatedAt }")).to be_present
+    end
+
+    it "returns null summary when the flag is on and generation has not started" do
+      @course.enable_feature!(:discussion_thread_summarizer)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:preview)
+        .and_return(:cooldown_denied)
+
+      expect(@discussion_type.resolve("summary { status }")).to be_nil
+    end
+
+    it "returns a generating summary when the flag is on and no cache row exists" do
+      @course.enable_feature!(:discussion_thread_summarizer)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+
+      expect(@discussion_type.resolve("summary { status }")).to eq "generating"
+      expect(@discussion_type.resolve("summary { text }")).to be_nil
+      expect(@discussion_type.resolve("summary { generatedAt }")).to be_nil
+    end
+  end
+
   context "course discussion" do
     it_behaves_like "DiscussionType" do
       let_once(:discussion) { graded_discussion_topic }

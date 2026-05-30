@@ -211,6 +211,15 @@ module Types
       Loaders::DiscussionEntryCountsLoader.for(current_user:).load(object)
     end
 
+    field :summary, Types::DiscussionThreadSummaryType, null: true
+    def summary
+      DiscussionThreadSummarizer::TopicSummaryEmbed.graphql_value(
+        discussion_topic: object,
+        viewer: current_user,
+        session:
+      )
+    end
+
     field :subscribed, Boolean, null: false
     def subscribed
       load_association(:discussion_topic_participants).then do
