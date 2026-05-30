@@ -815,3 +815,19 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Evidence completion | [#108](https://github.com/ejgdr/canvas-lms/pull/108) | (squash-merge SHA) | (squash-merge timestamp) |
 
 *Last verified: 2026-05-28 against squash-merge f2cd7a220c01d3b51900eafd9515833228d606be (evidence records); impl row remains `186a92f5e4231065a29f187e805d128eb30b6dcf`.*
+
+---
+
+## Cycle 23 implementation evidence
+
+| Step | PR | SHA / notes | Timestamp (UTC) |
+|------|----|-------------|-----------------|
+| Implementation | [#109](https://github.com/ejgdr/canvas-lms/pull/109) | `9bde31884ce686ac45634e36a62ea4591ad4008d` | 2026-05-29 |
+| Contract decision | D3 recorded in PR body | 403 / `require_initial_post` is the accepted gate contract; AC "returns null" satisfied in spirit by no content, no job | 2026-05-29 |
+| Controller gate proof | [spec/controllers/discussion_topics_api_controller_spec.rb](../../../spec/controllers/discussion_topics_api_controller_spec.rb#L1413) | 4 cases: generating/no summary; 403 blocked must-post; forbidden no-read; generating when gate satisfied | 2026-05-29 |
+| GraphQL guard | [spec/graphql/types/discussion_type_spec.rb](../../../spec/graphql/types/discussion_type_spec.rb#L194) | participant `summaryEnabled` remains a preference flag in shared examples for course + group discussions | 2026-05-29 |
+| Full-file runs | `spec/controllers/discussion_topics_api_controller_spec.rb`; `spec/graphql/types/discussion_type_spec.rb` | 83 examples, 0 failures, 2 pending; 137 examples, 0 failures | 2026-05-29 |
+| RuboCop | changed Ruby specs | 2 files inspected, no offenses detected | 2026-05-29 |
+| Diff size | branch diff vs `master` | 2 files changed, 59 insertions(+), 3 deletions(-) | 2026-05-29 |
+
+*Last verified (Cycle 23 row): 2026-05-29 against branch SHA `9bde31884ce686ac45634e36a62ea4591ad4008d`*
