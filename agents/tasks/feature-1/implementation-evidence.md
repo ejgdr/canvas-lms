@@ -855,11 +855,15 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Cycle | 24 |
 | Issue | [#21](https://github.com/ejgdr/canvas-lms/issues/21) — additive summary fields on DiscussionTopic REST + GraphQL |
 | Implementation PR | [#112](https://github.com/ejgdr/canvas-lms/pull/112), branch `feat/m4-topic-summary-embed`, squash-merge SHA `132427903290b7c65b81a947daa2965e0f0c4ed9` (2026-05-30T20:06:56Z) |
+| Evidence PR | [#113](https://github.com/ejgdr/canvas-lms/pull/113), branch `docs/cycle-24-evidence-records`, squash-merge SHA `23d4e9bcf1af5c0ec78c62716c015d8eb1550456` (2026-05-30T20:11:52Z) |
+| Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
+| Issue closure | [#21](https://github.com/ejgdr/canvas-lms/issues/21) closed by #112 (`closes #21`, 2026-05-30T20:06:57Z) |
 | What shipped | `DiscussionThreadSummarizer::TopicSummaryEmbed`; REST `show` + `view` additive `summary` object; GraphQL `Discussion.summary` + `DiscussionThreadSummary` type + `DiscussionThreadSummaryStatus` enum; [API doc](../../../doc/discussion_thread_summarizer_api_embed.md) |
 | Contract decision | `status` ∈ {`current`, `stale`, `generating`, `unavailable`}; `summary` is `null` only when no cache row exists **and** generation has not started (`rate_limited_empty` → `null`). `:generating` returns an object with `status: "generating"`, `text: nil`, `generated_at: nil`. |
 | Diff size | **465 lines** (+464 / −1); **196 lines** in controller spec alone — over 250 hard cap; justified as cohesive additive REST + GraphQL + type + module + tests unit (Cycle 17 precedent) |
 | Test evidence | **16 examples, 0 failures**, seed `63338` (~18.14 s). Matrix: {show, view, GraphQL} × {flag off + shape stability, cached current/stale, generating object, not started (`rate_limited_empty` → null)} |
 | Reproduce command | `docker compose exec web bundle exec rspec spec/controllers/discussion_topics_api_controller_spec.rb -e "thread summary embed" spec/graphql/types/discussion_type_spec.rb -e "thread summary embed"` |
-| QA lab | [qa-lab-evidence.md Cycle 24 row](./qa-lab-evidence.md#cycle-24--additive-summary-fields-issue-21) — `Pass`; board QA Status deferred to completion PR |
+| QA lab | [qa-lab-evidence.md Cycle 24 row](./qa-lab-evidence.md#cycle-24--additive-summary-fields-issue-21) — `Pass`; board QA Status → Pass applied on completion (item `183104736`) |
+| Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9OA` / `183104736`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 
-*Last verified (Cycle 24 row): 2026-05-30T20:07:30Z against squash-merge `132427903290b7c65b81a947daa2965e0f0c4ed9`*
+*Last verified (Cycle 24 row): 2026-05-30T20:12:00Z against implementation squash-merge `132427903290b7c65b81a947daa2965e0f0c4ed9`; evidence squash-merge `23d4e9bcf1af5c0ec78c62716c015d8eb1550456`*
