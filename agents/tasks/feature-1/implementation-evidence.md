@@ -889,3 +889,26 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9Qk`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 
 *Last verified (Cycle 25 row): 2026-05-31T04:56:00Z against implementation squash-merge `2bb202a6191261d82971bc464b87d4efdf5f115a`; evidence squash-merge `884e4a16d8d0600772b8771c61909a6cfbd832a5`*
+
+---
+
+## Cycle 26 — Generation latency metrics (issue #27)
+
+| Field | Content |
+|---|---|
+| Cycle | 26 |
+| Issue | [#27](https://github.com/ejgdr/canvas-lms/issues/27) — generation latency metrics (p50/p95/p99) |
+| Implementation PR | [#118](https://github.com/ejgdr/canvas-lms/pull/118), branch `feat/m4-generation-latency-metrics`, squash-merge SHA `f1d9a391efe892dcfff6b99d964cf7443b7e128e` (2026-05-31T05:12:14Z) |
+| Evidence PR | pending — closure SHA threads on squash-merge of this cycle's evidence PR |
+| Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
+| Issue closure | [#27](https://github.com/ejgdr/canvas-lms/issues/27) closed by #118 (`closes #27`, 2026-05-31T05:12:14Z) |
+| What shipped | Wired `Metrics.increment_generation_attempt`, `record_generation_latency_ms`, `increment_generation_error` in `SummarizationService#fetch_or_create_summary` / `#summarize`; release note in [observability doc](../../../doc/discussion_thread_summarizer_observability.md) |
+| Measurement boundary | Latency wraps `@client.summarize` + `validate` only (monotonic `t0` after gather/pseudonymize). Excludes cache lookup and rate-limiter probes. |
+| Metric names | `discussion_thread_summarizer.generation_attempt`, `.generation_latency_ms`, `.generation_error` — tags `account_id`, `scope_mode` (no PII) |
+| Diff size | **132 lines** (+132 / −16); under 250 cap |
+| Test evidence | **15 examples, 0 failures** (11 metrics + 4 service integration, seed `62572`, ~4.49 s service subset) |
+| Reproduce command | `docker compose run --rm web bin/rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb -e "generation latency metrics"` |
+| QA lab | [qa-lab-evidence.md Cycle 26 row](./qa-lab-evidence.md#cycle-26--generation-latency-metrics-issue-27) — `Pass`; board QA Status → Pass applied before impl merge (item `PVTI_lAHOBQJOSM4BWez_zgrp9Sw`) |
+| Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9Sw`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
+
+*Last verified (Cycle 26 row): 2026-05-31T05:12:14Z against implementation squash-merge `f1d9a391efe892dcfff6b99d964cf7443b7e128e`*
