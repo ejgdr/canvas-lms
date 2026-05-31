@@ -430,6 +430,24 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
+## Cycle 26 — Generation latency metrics (issue #27)
+
+| Field | Content |
+|---|---|
+| Slice | [#27](https://github.com/ejgdr/canvas-lms/issues/27) — InstStatsd generation metrics from async summarization job. Branch `feat/m4-generation-latency-metrics`. |
+| Classification | Behavior-changing application code — observability wiring in `SummarizationService` + `Metrics` helper rename/align to issue AC. |
+| Tests added / extended | `spec/lib/discussion_thread_summarizer/metrics_spec.rb` (3 generation helpers); `spec/services/discussion_thread_summarizer/summarization_service_spec.rb` (`generation latency metrics (#27)`, 4 examples). |
+| Command (targeted) | `docker compose run --rm web bin/rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb spec/services/discussion_thread_summarizer/summarization_service_spec.rb -e "generation latency metrics"` |
+| Outcome (targeted) | **15 examples, 0 failures** (11 metrics file + 4 service subset, seed `62572`, ~4.49 s service block). |
+| Matrix covered | Completed cache-miss job → attempt + latency; cache hit → no generation metrics; rate limit deny → no generation metrics; schema failure → error without latency. |
+| `QA Status` | `Pass` (board field updated via GraphQL before impl merge) |
+| PR / commit | [PR #118](https://github.com/ejgdr/canvas-lms/pull/118), squash-merged at `f1d9a391efe892dcfff6b99d964cf7443b7e128e` on 2026-05-31T05:12:14Z |
+| Trace to plan | NFR-4 latency metrics; M4 observability; blocks #50 dashboard aggregation. |
+
+*Last verified (Cycle 26 row): 2026-05-31T05:12:14Z against squash-merge `f1d9a391efe892dcfff6b99d964cf7443b7e128e`*
+
+---
+
 *Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*
 
 ---
