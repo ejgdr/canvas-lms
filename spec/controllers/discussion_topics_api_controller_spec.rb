@@ -1467,6 +1467,93 @@ describe DiscussionTopicsApiController do
       expect(body).to be_present
       expect(body["status"]).to eq("generating")
     end
+
+    it "includes regeneration metadata on GET when preview allows" do
+      get "thread_summary",
+          params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+          format: "json"
+
+      expect(response.parsed_body["regeneration"]).to eq("available" => true)
+    end
+
+    it "includes cooldown retry_after_seconds on GET when preview denies" do
+      cooldown_key = ["discussion_thread_summarizer", "cooldown", @student.id, @topic.id].cache_key
+      allow(Canvas.redis).to receive(:get) { |key| key == cooldown_key ? "1" : nil }
+      allow(Canvas.redis).to receive(:ttl).with(cooldown_key).and_return(240)
+
+      get "thread_summary",
+          params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+          format: "json"
+
+      expect(response.parsed_body["regeneration"]).to eq(
+        "available" => false,
+        "reason" => "cooldown",
+        "retry_after_seconds" => 240
+      )
+    end
+  end
+
+  context "regenerate_thread_summary (Discussion Thread Summarizer)" do
+    before do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @topic = @course.discussion_topics.create!(title: "discussion", user: @teacher)
+      @topic.discussion_entries.create!(user: @teacher, message: "hello")
+      user_session(@student)
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(Canvas.redis).to receive(:get).and_return(nil)
+    end
+
+    it "enqueues regeneration when cooldown and quota allow" do
+      allow(Canvas.redis).to receive(:set).and_return(true)
+      allow(Canvas.redis).to receive(:incr).and_return(1)
+      allow(Canvas.redis).to receive(:expire)
+
+      expect do
+        post "regenerate_thread_summary",
+             params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+             format: "json"
+      end.to change { Delayed::Job.count }.by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("status" => "generating", "enqueued" => true)
+    end
+
+    it "returns 429 with retry_after_seconds when cooldown denies" do
+      cooldown_key = ["discussion_thread_summarizer", "cooldown", @student.id, @topic.id].cache_key
+      allow(Canvas.redis).to receive(:set).with(cooldown_key, 1, nx: true, ex: 600).and_return(false)
+      allow(Canvas.redis).to receive(:ttl).with(cooldown_key).and_return(180)
+
+      expect do
+        post "regenerate_thread_summary",
+             params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+             format: "json"
+      end.not_to change { Delayed::Job.count }
+
+      expect(response).to have_http_status :too_many_requests
+      expect(response.parsed_body).to eq(
+        "error" => "cooldown",
+        "retry_after_seconds" => 180
+      )
+    end
+
+    it "returns 429 quota_exhausted when the daily budget is spent" do
+      allow(Canvas.redis).to receive(:set).and_return(true)
+      allow(Canvas.redis).to receive(:incr).and_return(101)
+      allow(Canvas.redis).to receive(:decr)
+      allow(Canvas.redis).to receive(:expire)
+
+      expect do
+        post "regenerate_thread_summary",
+             params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id },
+             format: "json"
+      end.not_to change { Delayed::Job.count }
+
+      expect(response).to have_http_status :too_many_requests
+      expect(response.parsed_body["error"]).to eq("quota_exhausted")
+      expect(response.parsed_body["message"]).to be_present
+    end
   end
 
   context "thread summary embed on show" do

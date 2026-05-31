@@ -85,6 +85,13 @@ module DiscussionThreadSummarizer
     end
     private_class_method :acquire_quota
 
+    def self.cooldown_remaining_seconds(user:, discussion_topic:)
+      raise REDIS_REQUIRED_MESSAGE unless Canvas.redis_enabled?
+
+      ttl = Canvas.redis.ttl(cooldown_key(user, discussion_topic))
+      ttl.positive? ? ttl : nil
+    end
+
     def self.cooldown_key(user, discussion_topic)
       ["discussion_thread_summarizer", "cooldown", user.id, discussion_topic.id].cache_key
     end
