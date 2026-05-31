@@ -877,7 +877,7 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Cycle | 25 |
 | Issue | [#25](https://github.com/ejgdr/canvas-lms/issues/25) — REST/GraphQL response shape integration tests |
 | Implementation PR | [#115](https://github.com/ejgdr/canvas-lms/pull/115), branch `feat/m4-summary-shape-integration-tests`, squash-merge SHA `2bb202a6191261d82971bc464b87d4efdf5f115a` (2026-05-31T04:55:21Z) |
-| Evidence PR | pending — closure SHA threads on squash-merge of this cycle's evidence PR |
+| Evidence PR | [#116](https://github.com/ejgdr/canvas-lms/pull/116), branch `docs/cycle-25-evidence-records`, squash-merge SHA `884e4a16d8d0600772b8771c61909a6cfbd832a5` (2026-05-31T04:56:00Z) |
 | Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
 | Issue closure | [#25](https://github.com/ejgdr/canvas-lms/issues/25) closed by #115 (`closes #25`, 2026-05-31T04:55:21Z) |
 | What shipped | `spec/apis/v1/discussion_thread_summary_shape_spec.rb` — smoke integration via `api_call` (REST show) and `CanvasSchema.execute` (GraphQL `Discussion.summary`) |
@@ -888,4 +888,4 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | QA lab | [qa-lab-evidence.md Cycle 25 row](./qa-lab-evidence.md#cycle-25--integration-test-summary-response-shapes-issue-25) — `Pass`; board QA Status → Pass applied before impl merge (item `PVTI_lAHOBQJOSM4BWez_zgrp9Qk`) |
 | Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9Qk`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 
-*Last verified (Cycle 25 row): 2026-05-31T04:55:21Z against implementation squash-merge `2bb202a6191261d82971bc464b87d4efdf5f115a`*
+*Last verified (Cycle 25 row): 2026-05-31T04:56:00Z against implementation squash-merge `2bb202a6191261d82971bc464b87d4efdf5f115a`; evidence squash-merge `884e4a16d8d0600772b8771c61909a6cfbd832a5`*
