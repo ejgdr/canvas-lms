@@ -259,6 +259,7 @@ describe DiscussionThreadSummarizer::SummarizationService do
 
     it "emits failure metric with reason 'schema_invalid' before re-raising" do
       allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_failure)
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_generation_error)
       svc = described_class.new(client: malformed_client)
 
       expect { svc.summarize(discussion_topic: topic, viewer:) }
@@ -267,6 +268,10 @@ describe DiscussionThreadSummarizer::SummarizationService do
       expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_failure).with(
         reason:  "schema_invalid",
         account: root_account
+      )
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_generation_error).with(
+        account: root_account,
+        scope_mode: "default"
       )
     end
   end
@@ -646,6 +651,76 @@ describe "DiscussionThreadSummarizer::SummarizationService#fetch_or_create_summa
       expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_rate_limit_allowed)
         .with(account: course.root_account)
       expect(stub_client).to have_received(:summarize).once
+    end
+  end
+
+  context "generation latency metrics (#27)" do
+    let(:account) { course.root_account }
+
+    before do
+      allow(Canvas).to receive(:redis_enabled?).and_return(true)
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:check).and_return(:allowed)
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_generation_attempt)
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:record_generation_latency_ms)
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_generation_error)
+    end
+
+    it "emits generation_attempt and generation_latency_ms on a completed cache-miss job" do
+      service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_generation_attempt).with(
+        account:,
+        scope_mode: "default"
+      )
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:record_generation_latency_ms).with(
+        hash_including(account:, scope_mode: "default", duration_ms: kind_of(Integer))
+      )
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_generation_error)
+    end
+
+    it "does not emit generation_attempt or generation_latency_ms on a cache hit" do
+      seed_summary
+
+      service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_generation_attempt)
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:record_generation_latency_ms)
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_generation_error)
+    end
+
+    it "does not emit generation_attempt or generation_latency_ms when the rate limiter denies" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:check)
+        .and_return(:cooldown_denied)
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_rate_limit_cooldown_denied)
+
+      service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_generation_attempt)
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:record_generation_latency_ms)
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:increment_generation_error)
+    end
+
+    it "emits generation_error without generation_latency_ms when generation fails" do
+      malformed = Class.new(DiscussionThreadSummarizer::ModelClient) do
+        def summarize(_payload)
+          { themes: [], viewpoints: [], open_questions: [] }
+        end
+      end.new
+      failing_service = DiscussionThreadSummarizer::SummarizationService.new(client: malformed)
+
+      expect do
+        failing_service.fetch_or_create_summary(discussion_topic: topic, viewer:, locale:)
+      end.to raise_error(DiscussionThreadSummarizer::SchemaViolationError)
+
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_generation_attempt).with(
+        account:,
+        scope_mode: "default"
+      )
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_generation_error).with(
+        account:,
+        scope_mode: "default"
+      )
+      expect(DiscussionThreadSummarizer::Metrics).not_to have_received(:record_generation_latency_ms)
     end
   end
 end
