@@ -27,21 +27,29 @@ module DiscussionThreadSummarizer
   module Metrics
     PREFIX = "discussion_thread_summarizer"
 
-    # Emitted each time a generation is attempted, regardless of outcome.
+    # Emitted each time a generation is attempted (cache miss + rate limit pass).
     def self.increment_generation_attempt(account:, scope_mode:)
       InstStatsd::Statsd.distributed_increment(
-        "#{PREFIX}.generation.attempt",
+        "#{PREFIX}.generation_attempt",
         tags: { account_id: account.global_id, scope_mode: }
       )
     end
 
-    # Records end-to-end generation latency in milliseconds.
-    # outcome: one of "success", "error", "timeout", "schema_invalid"
-    def self.record_generation_latency(duration_ms:, account:, outcome:)
+    # Records model-generation latency in milliseconds for completed jobs only.
+    # Tagged for p50/p95/p99 rollups — no PII.
+    def self.record_generation_latency_ms(duration_ms:, account:, scope_mode:)
       InstStatsd::Statsd.timing(
-        "#{PREFIX}.generation.latency",
+        "#{PREFIX}.generation_latency_ms",
         duration_ms,
-        tags: { account_id: account.global_id, outcome: }
+        tags: { account_id: account.global_id, scope_mode: }
+      )
+    end
+
+    # Emitted when a generation attempt fails before completing successfully.
+    def self.increment_generation_error(account:, scope_mode:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.generation_error",
+        tags: { account_id: account.global_id, scope_mode: }
       )
     end
 

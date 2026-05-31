@@ -102,6 +102,8 @@ module DiscussionThreadSummarizer
       end
 
       DiscussionThreadSummarizer::Metrics.increment_rate_limit_allowed(account:)
+      scope_mode = scope_mode_for(discussion_topic)
+      DiscussionThreadSummarizer::Metrics.increment_generation_attempt(account:, scope_mode:)
       result = summarize(discussion_topic:, viewer:)
       record = persist_summary_record(
         discussion_topic:,
@@ -160,18 +162,27 @@ module DiscussionThreadSummarizer
 
     def summarize(discussion_topic:, viewer:)
       account = discussion_topic.context.root_account
+      scope_mode = scope_mode_for(discussion_topic)
       payload = gather(discussion_topic, viewer)
       payload = pseudonymize(payload)
-      t0      = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
       result = @client.summarize(payload)
       begin
         validate(result)
       rescue DiscussionThreadSummarizer::SchemaViolationError
+        Metrics.increment_generation_error(account:, scope_mode:)
         Metrics.increment_failure(reason: "schema_invalid", account:)
         raise
       end
+      latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
+      Metrics.record_generation_latency_ms(duration_ms: latency_ms, account:, scope_mode:)
       result
+    rescue StandardError => e
+      unless e.is_a?(DiscussionThreadSummarizer::SchemaViolationError)
+        Metrics.increment_generation_error(account:, scope_mode:)
+      end
+      raise
     ensure
       if t0
         propagating = $!
@@ -265,7 +276,7 @@ module DiscussionThreadSummarizer
       scope_limited = course.root_account.feature_enabled?(
         :discussion_thread_summarizer_scope_limited
       )
-      scope_mode    = scope_limited ? "limited" : "default"
+      scope_mode    = scope_mode_for(discussion_topic, scope_limited:)
 
       raw_entries = discussion_topic.discussion_entries
                                     .active
@@ -286,6 +297,14 @@ module DiscussionThreadSummarizer
                         body:        entry.message || "" }
                     end
       }
+    end
+
+    def scope_mode_for(discussion_topic, scope_limited: nil)
+      scope_limited = discussion_topic.context.root_account.feature_enabled?(
+        :discussion_thread_summarizer_scope_limited
+      ) if scope_limited.nil?
+
+      scope_limited ? "limited" : "default"
     end
 
     def instructor_user_ids(course)

@@ -26,22 +26,32 @@ describe DiscussionThreadSummarizer::Metrics do
   end
 
   describe ".increment_generation_attempt" do
-    it "emits discussion_thread_summarizer.generation.attempt with account_id and scope_mode tags" do
+    it "emits discussion_thread_summarizer.generation_attempt with account_id and scope_mode tags" do
       described_class.increment_generation_attempt(account:, scope_mode: "default")
       expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
-        "discussion_thread_summarizer.generation.attempt",
+        "discussion_thread_summarizer.generation_attempt",
         tags: { account_id: 10_000_000_000_001, scope_mode: "default" }
       )
     end
   end
 
-  describe ".record_generation_latency" do
-    it "emits discussion_thread_summarizer.generation.latency with duration, account_id, and outcome tags" do
-      described_class.record_generation_latency(duration_ms: 342, account:, outcome: "success")
+  describe ".record_generation_latency_ms" do
+    it "emits discussion_thread_summarizer.generation_latency_ms with duration, account_id, and scope_mode tags" do
+      described_class.record_generation_latency_ms(duration_ms: 342, account:, scope_mode: "limited")
       expect(InstStatsd::Statsd).to have_received(:timing).with(
-        "discussion_thread_summarizer.generation.latency",
+        "discussion_thread_summarizer.generation_latency_ms",
         342,
-        tags: { account_id: 10_000_000_000_001, outcome: "success" }
+        tags: { account_id: 10_000_000_000_001, scope_mode: "limited" }
+      )
+    end
+  end
+
+  describe ".increment_generation_error" do
+    it "emits discussion_thread_summarizer.generation_error with account_id and scope_mode tags" do
+      described_class.increment_generation_error(account:, scope_mode: "default")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.generation_error",
+        tags: { account_id: 10_000_000_000_001, scope_mode: "default" }
       )
     end
   end
