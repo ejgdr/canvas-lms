@@ -867,3 +867,25 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9OA` / `183104736`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 
 *Last verified (Cycle 24 row): 2026-05-30T20:12:00Z against implementation squash-merge `132427903290b7c65b81a947daa2965e0f0c4ed9`; evidence squash-merge `23d4e9bcf1af5c0ec78c62716c015d8eb1550456`*
+
+---
+
+## Cycle 25 — Integration tests for additive summary response shapes (issue #25)
+
+| Field | Content |
+|---|---|
+| Cycle | 25 |
+| Issue | [#25](https://github.com/ejgdr/canvas-lms/issues/25) — REST/GraphQL response shape integration tests |
+| Implementation PR | [#115](https://github.com/ejgdr/canvas-lms/pull/115), branch `feat/m4-summary-shape-integration-tests`, squash-merge SHA `2bb202a6191261d82971bc464b87d4efdf5f115a` (2026-05-31T04:55:21Z) |
+| Evidence PR | pending — closure SHA threads on squash-merge of this cycle's evidence PR |
+| Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
+| Issue closure | [#25](https://github.com/ejgdr/canvas-lms/issues/25) closed by #115 (`closes #25`, 2026-05-31T04:55:21Z) |
+| What shipped | `spec/apis/v1/discussion_thread_summary_shape_spec.rb` — smoke integration via `api_call` (REST show) and `CanvasSchema.execute` (GraphQL `Discussion.summary`) |
+| Integration value | Full request stack (routing, Bearer token auth, `Api::V1::DiscussionTopics` serialization) vs #21 controller/`GraphQLTypeTester` unit matrix; no production code |
+| Diff size | **201 lines** (spec-only); under 250 cap |
+| Test evidence | **8 examples, 0 failures**, seed `33354` (~9.05 s). Matrix: REST + GraphQL × {flag off + shape stability, cached current, not started (`rate_limited_empty` → null)} |
+| Reproduce command | `docker compose run --rm web bin/rspec spec/apis/v1/discussion_thread_summary_shape_spec.rb --format documentation` |
+| QA lab | [qa-lab-evidence.md Cycle 25 row](./qa-lab-evidence.md#cycle-25--integration-test-summary-response-shapes-issue-25) — `Pass`; board QA Status → Pass applied before impl merge (item `PVTI_lAHOBQJOSM4BWez_zgrp9Qk`) |
+| Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9Qk`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
+
+*Last verified (Cycle 25 row): 2026-05-31T04:55:21Z against implementation squash-merge `2bb202a6191261d82971bc464b87d4efdf5f115a`*

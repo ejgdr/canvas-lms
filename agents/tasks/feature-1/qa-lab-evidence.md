@@ -412,6 +412,24 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
+## Cycle 25 — Integration test: summary response shapes (issue #25)
+
+| Field | Content |
+|---|---|
+| Slice | [#25](https://github.com/ejgdr/canvas-lms/issues/25) — smoke integration tests for additive `summary` on REST `show` and GraphQL `Discussion.summary`. Branch `feat/m4-summary-shape-integration-tests`. |
+| Classification | Test-only slice — extends coverage through `api_call` + `CanvasSchema.execute` integration paths. |
+| Tests added / extended | `spec/apis/v1/discussion_thread_summary_shape_spec.rb` (8 examples: REST GET show + GraphQL `Discussion.summary`). |
+| Command (targeted) | `docker compose run --rm web bin/rspec spec/apis/v1/discussion_thread_summary_shape_spec.rb --format documentation` |
+| Outcome (targeted) | **8 examples, 0 failures** (~9.05 s, seed `33354`). |
+| Matrix covered | REST + GraphQL: flag off (omit key / null + shape stability); cached `current`; not started (`rate_limited_empty` → null). |
+| `QA Status` | `Pass` (board field updated via GraphQL before impl merge) |
+| PR / commit | [PR #115](https://github.com/ejgdr/canvas-lms/pull/115), squash-merged at `2bb202a6191261d82971bc464b87d4efdf5f115a` on 2026-05-31T04:55:21Z |
+| Trace to plan | FR-4 toggle honor; M4 testing story; depends on #21 embed surfaces. |
+
+*Last verified (Cycle 25 row): 2026-05-31T04:55:21Z against squash-merge `2bb202a6191261d82971bc464b87d4efdf5f115a`*
+
+---
+
 *Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*
 
 ---
