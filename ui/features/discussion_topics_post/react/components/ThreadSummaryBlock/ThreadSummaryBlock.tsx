@@ -19,18 +19,21 @@
 import React from 'react'
 import {useScope as createI18nScope} from '@canvas/i18n'
 import {Alert} from '@instructure/ui-alerts'
+import {Button} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {Heading} from '@instructure/ui-heading'
 import {Spinner} from '@instructure/ui-spinner'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
+import {formatRegenerationCooldownLabel} from './formatRegenerationCooldown'
 import {formatThreadSummary} from './formatThreadSummary'
 import {useThreadSummary} from './useThreadSummary'
 
 const I18n = createI18nScope('discussion_topics_post')
 
 export const ThreadSummaryBlock = () => {
-  const {data, loading, error} = useThreadSummary()
+  const {data, loading, error, regeneration, quotaExhaustedMessage, regenerate, regenerating} =
+    useThreadSummary()
 
   if ((loading && !data) || !data || data.status === 'disabled') {
     return null
@@ -47,6 +50,54 @@ export const ThreadSummaryBlock = () => {
   }
 
   const summaryText = formatThreadSummary(data.summary)
+  const isGenerating = data.status === 'generating'
+  const isCooldown =
+    regeneration?.available === false && regeneration.reason === 'cooldown'
+  const cooldownSeconds = regeneration?.retry_after_seconds
+  const showRegenerateButton = !isGenerating
+
+  const handleRegenerateClick = (
+    event: React.MouseEvent<Element, MouseEvent> | React.KeyboardEvent<Element>,
+  ) => {
+    if (isCooldown) {
+      event.preventDefault()
+      return
+    }
+    void regenerate()
+  }
+
+  const renderRegenerateButton = () => {
+    if (!showRegenerateButton) {
+      return null
+    }
+
+    return (
+      <Flex.Item>
+        <Flex direction="column" alignItems="end">
+          <Flex.Item>
+            <Button
+              color="secondary"
+              size="small"
+              data-testid="thread-summary-regenerate-button"
+              aria-disabled={isCooldown ? 'true' : undefined}
+              aria-label={I18n.t('Regenerate summary')}
+              onClick={handleRegenerateClick}
+              disabled={regenerating}
+            >
+              {I18n.t('Regenerate summary')}
+            </Button>
+          </Flex.Item>
+          {isCooldown && cooldownSeconds != null && (
+            <Flex.Item margin="x-small 0 0 0">
+              <Text size="small" data-testid="thread-summary-regenerate-cooldown">
+                {formatRegenerationCooldownLabel(cooldownSeconds)}
+              </Text>
+            </Flex.Item>
+          )}
+        </Flex>
+      </Flex.Item>
+    )
+  }
 
   const renderSummaryText = () => {
     if (!summaryText) {
@@ -124,11 +175,28 @@ export const ThreadSummaryBlock = () => {
       data-testid="thread-summary-block"
     >
       <Flex direction="column">
+        {quotaExhaustedMessage && (
+          <Flex.Item margin="0 0 small 0">
+            <Alert
+              variant="warning"
+              margin="0"
+              hasShadow={false}
+              data-testid="thread-summary-quota-exhausted"
+            >
+              {quotaExhaustedMessage}
+            </Alert>
+          </Flex.Item>
+        )}
         <Flex.Item margin="0 0 small 0">
-          <Heading level="h3">{I18n.t('Thread summary')}</Heading>
-          <Text size="small" color="secondary">
-            {I18n.t('AI-generated thread summary')}
-          </Text>
+          <Flex justifyItems="space-between" alignItems="start">
+            <Flex.Item shouldGrow shouldShrink>
+              <Heading level="h3">{I18n.t('Thread summary')}</Heading>
+              <Text size="small" color="secondary">
+                {I18n.t('AI-generated thread summary')}
+              </Text>
+            </Flex.Item>
+            {renderRegenerateButton()}
+          </Flex>
         </Flex.Item>
         {renderContent()}
       </Flex>

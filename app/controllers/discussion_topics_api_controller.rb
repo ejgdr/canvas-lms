@@ -157,6 +157,52 @@ class DiscussionTopicsApiController < ApplicationController
     render(json: thread_summary_json(result))
   end
 
+  # @API Regenerate thread summary (Discussion Thread Summarizer)
+  #
+  # Enqueues a background regeneration job when cooldown and daily quota allow.
+  # Returns 429 with retry_after_seconds when the per-user per-thread cooldown
+  # is active, or a quota_exhausted error when the account daily budget is spent.
+  #
+  # @example_request
+  #
+  #     curl https://<canvas>/api/v1/courses/<course_id>/discussion_topics/<topic_id>/thread_summary/regenerate \
+  #         -X POST \
+  #         -H 'Authorization: Bearer <token>'
+  def regenerate_thread_summary
+    result = DiscussionThreadSummarizer::SummarizationService.new.request_regenerate(
+      discussion_topic: @topic,
+      viewer: @current_user,
+      locale: I18n.locale.to_s
+    )
+
+    case result.status
+    when :generating
+      render(json: { status: "generating", enqueued: true })
+    when :cooldown_denied
+      render(
+        json: {
+          error: "cooldown",
+          retry_after_seconds: result.retry_after_seconds ||
+            Setting.get(
+              DiscussionThreadSummarizer::RegenerationRateLimiter::COOLDOWN_SETTING_KEY,
+              DiscussionThreadSummarizer::RegenerationRateLimiter::DEFAULT_COOLDOWN_SECONDS
+            ).to_i
+        },
+        status: :too_many_requests
+      )
+    when :quota_denied
+      render(
+        json: {
+          error: "quota_exhausted",
+          message: t("Daily regeneration limit reached. Try again later.")
+        },
+        status: :too_many_requests
+      )
+    when :disabled
+      render(json: { status: "disabled", enabled: false, enqueued: false })
+    end
+  end
+
   # @API Find or Create Summary
   #
   # Generates a summary for a discussion topic. Returns the summary text and usage information.
@@ -1378,13 +1424,41 @@ class DiscussionTopicsApiController < ApplicationController
       return { status: "disabled", enabled: false, enqueued: false }
     end
 
-    {
+    payload = {
       status: result.status.to_s,
       enabled: true,
       enqueued: result.enqueued,
       summary: result.result,
-      record_id: result.record&.id
+      record_id: result.record&.id,
+      regeneration: thread_summary_regeneration_json
     }
+    payload
+  end
+
+  def thread_summary_regeneration_json
+    account = @topic.context.root_account
+    case DiscussionThreadSummarizer::RegenerationRateLimiter.preview(
+      account:,
+      user: @current_user,
+      discussion_topic: @topic
+    )
+    when :allowed
+      { available: true }
+    when :cooldown_denied
+      {
+        available: false,
+        reason: "cooldown",
+        retry_after_seconds: DiscussionThreadSummarizer::RegenerationRateLimiter.cooldown_remaining_seconds(
+          user: @current_user,
+          discussion_topic: @topic
+        ) || Setting.get(
+          DiscussionThreadSummarizer::RegenerationRateLimiter::COOLDOWN_SETTING_KEY,
+          DiscussionThreadSummarizer::RegenerationRateLimiter::DEFAULT_COOLDOWN_SECONDS
+        ).to_i
+      }
+    when :quota_denied
+      { available: false, reason: "quota_exhausted" }
+    end
   end
 
   def fetch_or_create_summary(llm_config:, dynamic_content:, dynamic_content_hash:, user_input:, parent_summary: nil, locale: nil)

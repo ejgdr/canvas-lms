@@ -18,6 +18,7 @@
 
 import React from 'react'
 import {act, render, waitFor} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import fakeENV from '@canvas/test-utils/fakeENV'
 import {setupServer} from 'msw/node'
 import {http, HttpResponse} from 'msw'
@@ -43,6 +44,8 @@ const sampleSummary = {
 
 const threadSummaryPath =
   '/api/v1/courses/1234/discussion_topics/5678/thread_summary'
+
+const threadSummaryRegeneratePath = `${threadSummaryPath}/regenerate`
 
 const setup = () => render(<ThreadSummaryBlock />)
 
@@ -70,6 +73,12 @@ describe('ThreadSummaryBlock', () => {
 
   const mockThreadSummary = (body: ThreadSummaryData) => {
     server.use(http.get(threadSummaryPath, () => HttpResponse.json(body)))
+  }
+
+  const mockRegenerate = (
+    handler: () => ReturnType<typeof HttpResponse.json> | Response,
+  ) => {
+    server.use(http.post(threadSummaryRegeneratePath, handler))
   }
 
   it('does not render when the API returns disabled', async () => {
@@ -201,5 +210,124 @@ describe('ThreadSummaryBlock', () => {
 
     expect(await findByTestId('thread-summary-text')).toBeInTheDocument()
     expect(await findByTestId('thread-summary-rate-limited-stale')).toBeInTheDocument()
+  })
+
+  it('enqueues regeneration and shows generating state when regenerate succeeds', async () => {
+    let regenerateCount = 0
+
+    mockThreadSummary({
+      status: 'current',
+      enabled: true,
+      enqueued: false,
+      summary: sampleSummary,
+      record_id: 1,
+      regeneration: {available: true},
+    })
+
+    mockRegenerate(() => {
+      regenerateCount += 1
+      return HttpResponse.json({status: 'generating', enqueued: true})
+    })
+
+    server.use(
+      http.get(threadSummaryPath, () => {
+        if (regenerateCount > 0) {
+          return HttpResponse.json({
+            status: 'generating',
+            enabled: true,
+            enqueued: true,
+            summary: null,
+            record_id: 1,
+            regeneration: {available: false, reason: 'cooldown', retry_after_seconds: 600},
+          })
+        }
+        return HttpResponse.json({
+          status: 'current',
+          enabled: true,
+          enqueued: false,
+          summary: sampleSummary,
+          record_id: 1,
+          regeneration: {available: true},
+        })
+      }),
+    )
+
+    const user = userEvent.setup()
+    const {findByTestId, queryByTestId} = setup()
+
+    const button = await findByTestId('thread-summary-regenerate-button')
+    await user.click(button)
+
+    await waitFor(() => {
+      expect(regenerateCount).toBe(1)
+    })
+    expect(await findByTestId('thread-summary-generating')).toBeInTheDocument()
+    expect(queryByTestId('thread-summary-regenerate-button')).toBeNull()
+  })
+
+  it('shows cooldown feedback with aria-disabled and does not POST when in cooldown', async () => {
+    let regenerateCount = 0
+
+    mockThreadSummary({
+      status: 'current',
+      enabled: true,
+      enqueued: false,
+      summary: sampleSummary,
+      record_id: 1,
+      regeneration: {
+        available: false,
+        reason: 'cooldown',
+        retry_after_seconds: 240,
+      },
+    })
+
+    mockRegenerate(() => {
+      regenerateCount += 1
+      return HttpResponse.json({error: 'cooldown', retry_after_seconds: 240}, {status: 429})
+    })
+
+    const user = userEvent.setup()
+    const {findByTestId} = setup()
+
+    const button = await findByTestId('thread-summary-regenerate-button')
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).not.toHaveAttribute('disabled')
+
+    button.focus()
+    expect(button).toHaveFocus()
+
+    await user.click(button)
+
+    expect(regenerateCount).toBe(0)
+    expect(await findByTestId('thread-summary-regenerate-cooldown')).toBeInTheDocument()
+  })
+
+  it('shows inline quota-exhausted message instead of a toast', async () => {
+    mockThreadSummary({
+      status: 'current',
+      enabled: true,
+      enqueued: false,
+      summary: sampleSummary,
+      record_id: 1,
+      regeneration: {available: true},
+    })
+
+    mockRegenerate(() =>
+      HttpResponse.json(
+        {
+          error: 'quota_exhausted',
+          message: 'Daily regeneration limit reached. Try again later.',
+        },
+        {status: 429},
+      ),
+    )
+
+    const user = userEvent.setup()
+    const {findByTestId, queryByTestId} = setup()
+
+    await user.click(await findByTestId('thread-summary-regenerate-button'))
+
+    expect(await findByTestId('thread-summary-quota-exhausted')).toBeInTheDocument()
+    expect(queryByTestId('thread-summary-generating')).toBeNull()
   })
 })

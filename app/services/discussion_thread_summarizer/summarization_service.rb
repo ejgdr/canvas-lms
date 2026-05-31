@@ -39,6 +39,7 @@ module DiscussionThreadSummarizer
     ].freeze
 
     RenderResult = Struct.new(:status, :record, :result, :enqueued, keyword_init: true)
+    RegenerateResult = Struct.new(:status, :retry_after_seconds, :enqueued, keyword_init: true)
 
     # Enqueues a background summary attempt via Delayed Job.
     # Mirrors the insight_generation pattern in DiscussionTopicsApiController.
@@ -113,6 +114,35 @@ module DiscussionThreadSummarizer
         result:
       )
       CacheResult.new(status: :miss, record: record, result: result)
+    end
+
+    # Manual regeneration entrypoint: consumes cooldown/quota budget via .check,
+    # then enqueues a background job. Does not block on generation.
+    def request_regenerate(discussion_topic:, viewer:, locale: I18n.locale.to_s)
+      course = discussion_topic.context
+      unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
+        return RegenerateResult.new(status: :disabled)
+      end
+
+      account = course.root_account
+      case RegenerationRateLimiter.check(account:, user: viewer, discussion_topic:)
+      when :cooldown_denied
+        DiscussionThreadSummarizer::Metrics.increment_rate_limit_cooldown_denied(account:)
+        return RegenerateResult.new(
+          status: :cooldown_denied,
+          retry_after_seconds: RegenerationRateLimiter.cooldown_remaining_seconds(
+            user: viewer,
+            discussion_topic:
+          )
+        )
+      when :quota_denied
+        DiscussionThreadSummarizer::Metrics.increment_rate_limit_quota_denied(account:)
+        return RegenerateResult.new(status: :quota_denied)
+      end
+
+      DiscussionThreadSummarizer::Metrics.increment_rate_limit_allowed(account:)
+      self.class.enqueue_for(discussion_topic:, viewer:)
+      RegenerateResult.new(status: :generating, enqueued: true)
     end
 
     # Render-time lookup: read-only with respect to the model and rate-limit budget.
