@@ -922,8 +922,8 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Cycle | 27 |
 | Issues | [#23](https://github.com/ejgdr/canvas-lms/issues/23) — frontend regenerate button + cooldown UX; [#121](https://github.com/ejgdr/canvas-lms/issues/121) — backend `POST .../thread_summary/regenerate` (filed to trace endpoint gap after #18/#84) |
 | Implementation PR | [#122](https://github.com/ejgdr/canvas-lms/pull/122), branch `feat/m4-regenerate-cooldown-ux`, squash-merge SHA `640992dc379987df3721f7443d3dbf5cec3d6c2e` (2026-05-31T05:37:48Z) |
-| Evidence PR | pending — branch `docs/cycle-27-evidence-records` |
-| Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
+| Evidence PR | [#123](https://github.com/ejgdr/canvas-lms/pull/123), branch `docs/cycle-27-evidence-records`, squash-merge SHA `3467ac3a8a42359e3e5d92626c4c2498bca67eed` (2026-05-31T05:40:38Z) |
+| Completion PR | pending — branch `docs/cycle-27-completion-records` |
 | Issue closure | [#23](https://github.com/ejgdr/canvas-lms/issues/23) and [#121](https://github.com/ejgdr/canvas-lms/issues/121) closed by #122 (`closes #23`, `closes #121`, 2026-05-31T05:37:49Z) |
 | Paired-issue rationale | Regenerate route assumed by #23 (FR-7) but absent on `master` after #18 (rate limiter) and #84 (GET render path). Rather than unwind the branch, #121 filed + both closed in one cycle — mirroring Cycle 23 **#24 + #26** paired precedent. |
 | What shipped (frontend) | `ThreadSummaryBlock` regenerate button; `aria-disabled` cooldown state (focusable); inline quota-exhaustion `Alert` (no toast); `formatRegenerationCooldown` pure helper; `useThreadSummary` regenerate + polling reuse |
@@ -936,4 +936,20 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Board (completion) | #23 item `PVTI_lAHOBQJOSM4BWez_zgrp9O8` / `183104751`; #121 item `PVTI_lAHOBQJOSM4BWez_zguR8Dg` / `194113592`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 | M4 milestone | **Complete** — all nine M4-labeled issues closed (#21–#27, #95, #22 duplicate, #121) |
 
-*Last verified (Cycle 27 row): pending evidence PR merge against implementation squash-merge `640992dc379987df3721f7443d3dbf5cec3d6c2e`*
+*Last verified (Cycle 27 row): 2026-05-31T05:40:38Z against implementation squash-merge `640992dc379987df3721f7443d3dbf5cec3d6c2e`; evidence squash-merge `3467ac3a8a42359e3e5d92626c4c2498bca67eed`*
+
+---
+
+## Cycle 27 completion record
+
+| Step | PR / issue | Board / note | Timestamp (UTC) |
+|------|------------|--------------|-----------------|
+| Implementation | [#122](https://github.com/ejgdr/canvas-lms/pull/122) | Squash-merge `640992dc379987df3721f7443d3dbf5cec3d6c2e`; closes #23 + #121 | 2026-05-31T05:37:48Z |
+| Backend issue filed | [#121](https://github.com/ejgdr/canvas-lms/issues/121) | Paired with #23 for endpoint traceability (Cycle 23 #24+#26 precedent) | 2026-05-31T05:32:52Z |
+| Evidence PR | [#123](https://github.com/ejgdr/canvas-lms/pull/123) | Cycle 27 evidence row for both #23 and #121 | 2026-05-31T05:40:38Z |
+| Issue #23 | [#23](https://github.com/ejgdr/canvas-lms/issues/23) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9O8`: Status = Done; QA Status = Pass | 2026-05-31T05:40:49Z |
+| Issue #121 | [#121](https://github.com/ejgdr/canvas-lms/issues/121) | Project item `PVTI_lAHOBQJOSM4BWez_zguR8Dg`: Status = Done; QA Status = Pass | 2026-05-31T05:40:50Z |
+| M4 milestone | All M4 issues | Nine issues closed — per-thread summary surface complete | 2026-05-31T05:37:49Z |
+| Completion PR | pending | This doc records board transitions and closure trail for Cycle 27 | 2026-05-31T05:41:00Z |
+
+*Last verified (Cycle 27 completion row): pending completion PR merge*
