@@ -912,3 +912,28 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9Sw`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 
 *Last verified (Cycle 26 row): 2026-05-31T05:12:43Z against implementation squash-merge `f1d9a391efe892dcfff6b99d964cf7443b7e128e`; evidence squash-merge `ad7c296ba4e98ce2ef5b1f162269f89d469a5f79`*
+
+---
+
+## Cycle 27 — Regenerate + cooldown UX + backend regenerate endpoint (issues #23, #121)
+
+| Field | Content |
+|---|---|
+| Cycle | 27 |
+| Issues | [#23](https://github.com/ejgdr/canvas-lms/issues/23) — frontend regenerate button + cooldown UX; [#121](https://github.com/ejgdr/canvas-lms/issues/121) — backend `POST .../thread_summary/regenerate` (filed to trace endpoint gap after #18/#84) |
+| Implementation PR | [#122](https://github.com/ejgdr/canvas-lms/pull/122), branch `feat/m4-regenerate-cooldown-ux`, squash-merge SHA `640992dc379987df3721f7443d3dbf5cec3d6c2e` (2026-05-31T05:37:48Z) |
+| Evidence PR | pending — branch `docs/cycle-27-evidence-records` |
+| Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
+| Issue closure | [#23](https://github.com/ejgdr/canvas-lms/issues/23) and [#121](https://github.com/ejgdr/canvas-lms/issues/121) closed by #122 (`closes #23`, `closes #121`, 2026-05-31T05:37:49Z) |
+| Paired-issue rationale | Regenerate route assumed by #23 (FR-7) but absent on `master` after #18 (rate limiter) and #84 (GET render path). Rather than unwind the branch, #121 filed + both closed in one cycle — mirroring Cycle 23 **#24 + #26** paired precedent. |
+| What shipped (frontend) | `ThreadSummaryBlock` regenerate button; `aria-disabled` cooldown state (focusable); inline quota-exhaustion `Alert` (no toast); `formatRegenerationCooldown` pure helper; `useThreadSummary` regenerate + polling reuse |
+| What shipped (backend) | `POST .../thread_summary/regenerate`; `SummarizationService#request_regenerate`; `RegenerationRateLimiter.cooldown_remaining_seconds`; additive `regeneration` metadata on `GET .../thread_summary`; release note in [api embed doc](../../../doc/discussion_thread_summarizer_api_embed.md) |
+| Diff size | **631 lines** (+631 / −18); over 250 soft cap — justified as cohesive FR-7 feature + paired backend (Cycle 17/23 precedent) |
+| Test evidence | **14 JS + 11 Ruby, 0 failures** (JS seed `1780205921983`; Ruby seed `17098`) |
+| Reproduce command (JS) | `docker compose run --rm web yarn test ui/features/discussion_topics_post/react/components/ThreadSummaryBlock/__tests__/formatRegenerationCooldown.test.ts ui/features/discussion_topics_post/react/components/ThreadSummaryBlock/__tests__/ThreadSummaryBlock.test.tsx --run` |
+| Reproduce command (Ruby) | `docker compose run --rm web bin/rspec spec/controllers/discussion_topics_api_controller_spec.rb -e "thread_summary (Discussion Thread Summarizer)" -e "regenerate_thread_summary"` |
+| QA lab | [qa-lab-evidence.md Cycle 27 row](./qa-lab-evidence.md#cycle-27--regenerate--cooldown-ux--backend-endpoint-issues-23-121) — `Pass`; board QA Status → Pass applied on completion (items `#23` / `#121`) |
+| Board (completion) | #23 item `PVTI_lAHOBQJOSM4BWez_zgrp9O8` / `183104751`; #121 item `PVTI_lAHOBQJOSM4BWez_zguR8Dg` / `194113592`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
+| M4 milestone | **Complete** — all nine M4-labeled issues closed (#21–#27, #95, #22 duplicate, #121) |
+
+*Last verified (Cycle 27 row): pending evidence PR merge against implementation squash-merge `640992dc379987df3721f7443d3dbf5cec3d6c2e`*

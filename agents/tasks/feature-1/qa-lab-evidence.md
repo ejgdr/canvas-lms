@@ -448,6 +448,26 @@ The first closed slice (issue #1, PR #54) merged before this workflow was introd
 
 ---
 
+## Cycle 27 — Regenerate + cooldown UX + backend endpoint (issues #23, #121)
+
+| Field | Content |
+|---|---|
+| Slice | [#23](https://github.com/ejgdr/canvas-lms/issues/23) frontend regenerate UX + [#121](https://github.com/ejgdr/canvas-lms/issues/121) backend `POST .../thread_summary/regenerate`. Branch `feat/m4-regenerate-cooldown-ux`. |
+| Classification | Behavior-changing application code — React regenerate button + Ruby regenerate route/service (paired; Cycle 23 #24+#26 precedent). |
+| Tests added / extended | `ThreadSummaryBlock.test.tsx` (+4 regenerate/cooldown/quota); `formatRegenerationCooldown.test.ts` (new, 4); `discussion_topics_api_controller_spec.rb` (+5 regeneration metadata + POST regenerate). |
+| Command (JS) | `docker compose run --rm web yarn test ui/features/discussion_topics_post/react/components/ThreadSummaryBlock/__tests__/formatRegenerationCooldown.test.ts ui/features/discussion_topics_post/react/components/ThreadSummaryBlock/__tests__/ThreadSummaryBlock.test.tsx --run` |
+| Outcome (JS) | **14 examples, 0 failures** (seed `1780205921983`, ~9.25 s). |
+| Command (Ruby) | `docker compose run --rm web bin/rspec spec/controllers/discussion_topics_api_controller_spec.rb -e "thread_summary (Discussion Thread Summarizer)" -e "regenerate_thread_summary"` |
+| Outcome (Ruby) | **11 examples, 0 failures** (seed `17098`, ~11.6 s). |
+| Matrix covered | Regenerate success → generating + poll; cooldown `aria-disabled` + no POST; POST 429 cooldown; quota inline alert; GET `regeneration` metadata; POST enqueue / 429 cooldown / 429 quota. |
+| `QA Status` | `Pass` (board field update on completion PR) |
+| PR / commit | [PR #122](https://github.com/ejgdr/canvas-lms/pull/122), squash-merged at `640992dc379987df3721f7443d3dbf5cec3d6c2e` on 2026-05-31T05:37:48Z |
+| Trace to plan | FR-7 rate-limit regeneration UX; M4 per-thread summary surface (final slice). |
+
+*Last verified (Cycle 27 row): 2026-05-31T05:39:00Z against squash-merge `640992dc379987df3721f7443d3dbf5cec3d6c2e`*
+
+---
+
 *Last verified: 2026-05-28 against squash-merge 186a92f5e4231065a29f187e805d128eb30b6dcf*
 
 ---
