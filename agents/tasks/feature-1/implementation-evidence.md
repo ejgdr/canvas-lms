@@ -899,7 +899,7 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Cycle | 26 |
 | Issue | [#27](https://github.com/ejgdr/canvas-lms/issues/27) — generation latency metrics (p50/p95/p99) |
 | Implementation PR | [#118](https://github.com/ejgdr/canvas-lms/pull/118), branch `feat/m4-generation-latency-metrics`, squash-merge SHA `f1d9a391efe892dcfff6b99d964cf7443b7e128e` (2026-05-31T05:12:14Z) |
-| Evidence PR | pending — closure SHA threads on squash-merge of this cycle's evidence PR |
+| Evidence PR | [#119](https://github.com/ejgdr/canvas-lms/pull/119), branch `docs/cycle-26-evidence-records`, squash-merge SHA `ad7c296ba4e98ce2ef5b1f162269f89d469a5f79` (2026-05-31T05:12:43Z) |
 | Completion PR | pending — closure SHA threads on squash-merge of this cycle's completion PR |
 | Issue closure | [#27](https://github.com/ejgdr/canvas-lms/issues/27) closed by #118 (`closes #27`, 2026-05-31T05:12:14Z) |
 | What shipped | Wired `Metrics.increment_generation_attempt`, `record_generation_latency_ms`, `increment_generation_error` in `SummarizationService#fetch_or_create_summary` / `#summarize`; release note in [observability doc](../../../doc/discussion_thread_summarizer_observability.md) |
@@ -911,4 +911,4 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | QA lab | [qa-lab-evidence.md Cycle 26 row](./qa-lab-evidence.md#cycle-26--generation-latency-metrics-issue-27) — `Pass`; board QA Status → Pass applied before impl merge (item `PVTI_lAHOBQJOSM4BWez_zgrp9Sw`) |
 | Board (completion) | Project item `PVTI_lAHOBQJOSM4BWez_zgrp9Sw`: Status → Done (`98236657`); QA Status → Pass (`875199fe`) via GraphQL after completion PR merge |
 
-*Last verified (Cycle 26 row): 2026-05-31T05:12:14Z against implementation squash-merge `f1d9a391efe892dcfff6b99d964cf7443b7e128e`*
+*Last verified (Cycle 26 row): 2026-05-31T05:12:43Z against implementation squash-merge `f1d9a391efe892dcfff6b99d964cf7443b7e128e`; evidence squash-merge `ad7c296ba4e98ce2ef5b1f162269f89d469a5f79`*
