@@ -26,11 +26,21 @@ describe DiscussionThreadSummarizer::Metrics do
   end
 
   describe ".increment_generation_attempt" do
-    it "emits discussion_thread_summarizer.generation_attempt with account_id and scope_mode tags" do
+    # Dashboard panel contract (#40): daily generation_attempt counts per account,
+    # filterable by scope_mode tag. Only two values are valid: "default" and "limited".
+    it "emits with scope_mode: default for standard mode" do
       described_class.increment_generation_attempt(account:, scope_mode: "default")
       expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
         "discussion_thread_summarizer.generation_attempt",
         tags: { account_id: 10_000_000_000_001, scope_mode: "default" }
+      )
+    end
+
+    it "emits with scope_mode: limited for scope-limited mode" do
+      described_class.increment_generation_attempt(account:, scope_mode: "limited")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.generation_attempt",
+        tags: { account_id: 10_000_000_000_001, scope_mode: "limited" }
       )
     end
   end
