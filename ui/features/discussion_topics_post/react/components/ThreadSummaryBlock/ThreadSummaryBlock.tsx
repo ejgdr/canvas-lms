@@ -99,6 +99,8 @@ export const ThreadSummaryBlock = () => {
     )
   }
 
+  const disclosure = data.summary?.disclosure
+
   const renderSummaryText = () => {
     if (!summaryText) {
       return null
@@ -106,6 +108,17 @@ export const ThreadSummaryBlock = () => {
     return (
       <Flex.Item margin="0 0 small 0">
         <Text data-testid="thread-summary-text">{summaryText}</Text>
+      </Flex.Item>
+    )
+  }
+
+  const renderDisclosure = () => {
+    if (!disclosure) return null
+    return (
+      <Flex.Item margin="x-small 0 0 0">
+        <Text size="small" color="secondary" data-testid="thread-summary-disclosure">
+          {disclosure}
+        </Text>
       </Flex.Item>
     )
   }
@@ -147,12 +160,14 @@ export const ThreadSummaryBlock = () => {
               </Alert>
             </Flex.Item>
             {renderSummaryText()}
+            {renderDisclosure()}
           </>
         )
       case 'rate_limited_stale':
         return (
           <>
             {renderSummaryText()}
+            {renderDisclosure()}
             <Flex.Item margin="small 0 0 0">
               <Text data-testid="thread-summary-rate-limited-stale">
                 {I18n.t('Summary may be outdated; refresh limit reached.')}
@@ -161,7 +176,12 @@ export const ThreadSummaryBlock = () => {
           </>
         )
       case 'current':
-        return renderSummaryText()
+        return (
+          <>
+            {renderSummaryText()}
+            {renderDisclosure()}
+          </>
+        )
       default:
         return null
     }

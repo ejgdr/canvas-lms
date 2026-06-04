@@ -302,6 +302,58 @@ describe('ThreadSummaryBlock', () => {
     expect(await findByTestId('thread-summary-regenerate-cooldown')).toBeInTheDocument()
   })
 
+  it('renders disclosure when summary.disclosure is set and status is current', async () => {
+    mockThreadSummary({
+      status: 'current',
+      enabled: true,
+      enqueued: false,
+      summary: {
+        ...sampleSummary,
+        disclosure: 'Based on instructor posts and your posts only',
+      },
+      record_id: 1,
+    })
+
+    const {findByTestId} = setup()
+
+    const disclosure = await findByTestId('thread-summary-disclosure')
+    expect(disclosure.textContent).toBe('Based on instructor posts and your posts only')
+  })
+
+  it('renders disclosure when summary.disclosure is set and status is stale', async () => {
+    mockThreadSummary({
+      status: 'stale',
+      enabled: true,
+      enqueued: true,
+      summary: {
+        ...sampleSummary,
+        disclosure: 'Based on instructor posts and your posts only',
+      },
+      record_id: 1,
+    })
+
+    const {findByTestId} = setup()
+
+    expect(await findByTestId('thread-summary-stale-alert')).toBeInTheDocument()
+    const disclosure = await findByTestId('thread-summary-disclosure')
+    expect(disclosure.textContent).toBe('Based on instructor posts and your posts only')
+  })
+
+  it('does not render disclosure element when summary.disclosure is null', async () => {
+    mockThreadSummary({
+      status: 'current',
+      enabled: true,
+      enqueued: false,
+      summary: {...sampleSummary, disclosure: null},
+      record_id: 1,
+    })
+
+    const {findByTestId, queryByTestId} = setup()
+
+    await findByTestId('thread-summary-text')
+    expect(queryByTestId('thread-summary-disclosure')).toBeNull()
+  })
+
   it('shows inline quota-exhausted message instead of a toast', async () => {
     mockThreadSummary({
       status: 'current',

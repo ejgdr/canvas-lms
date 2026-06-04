@@ -31,17 +31,29 @@ module DiscussionThreadSummarizer
   # Mirrors the algorithm in DiscussionTopicInsight::Entry.hash_for_dynamic_content
   # (app/models/discussion_topic_insight/entry.rb:43–50): Digest::SHA256.hexdigest
   # over a JSON-serialised structured value, producing a 64-char lowercase hex
-  # string. No user identity is included — avoiding per-viewer cache fragmentation.
+  # string.
+  #
+  # Scope behaviour:
+  #   - Default mode (scope_mode: "default"): viewer-agnostic. Produces the same
+  #     digest as the original algorithm (Digest::SHA256.hexdigest(tuples.to_json))
+  #     so all existing cached rows remain valid after the upgrade — no regeneration
+  #     storm on deploy.
+  #   - Scope-limited mode (scope_mode: "limited"): folds viewer.id into the digest
+  #     so each viewer gets an isolated cache row. Prevents cross-viewer summary
+  #     leakage when summaries are built from viewer-specific entry subsets (FR-5).
+  #     viewer must not be nil in this mode.
   #
   # Pure utility: no DB writes, no cache interaction, no side effects.
   class ContentVersionHash
-    # Returns a 64-char lowercase hex SHA-256 digest representing the topic's
-    # current active reply state. Returns a stable digest of an empty array
-    # when the topic has no active entries.
+    # Returns a 64-char lowercase hex SHA-256 digest.
     #
-    # Raises ArgumentError if discussion_topic is nil.
-    def self.call(discussion_topic)
+    # Raises ArgumentError if discussion_topic is nil, or if scope_mode is
+    # "limited" and viewer is nil.
+    def self.call(discussion_topic, scope_mode: "default", viewer: nil)
       raise ArgumentError, "discussion_topic must not be nil" if discussion_topic.nil?
+      if scope_mode == "limited" && viewer.nil?
+        raise ArgumentError, "viewer is required when scope_mode is 'limited'"
+      end
 
       rows = discussion_topic
                .discussion_entries
@@ -50,7 +62,14 @@ module DiscussionThreadSummarizer
                .pluck(:id, :message)
 
       tuples = rows.map { |id, msg| { id:, message: msg.to_s } }
-      Digest::SHA256.hexdigest(tuples.to_json)
+
+      if scope_mode == "limited"
+        # Per-viewer key: different viewers on the same topic → different rows.
+        Digest::SHA256.hexdigest({ scope_mode:, viewer_id: viewer.id, entries: tuples }.to_json)
+      else
+        # Default mode: viewer-agnostic, identical to the original algorithm.
+        Digest::SHA256.hexdigest(tuples.to_json)
+      end
     end
   end
 end
