@@ -1632,6 +1632,7 @@ CanvasRails::Application.routes.draw do
         put "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/entries/:entry_id/read", action: :mark_entry_read, as: "#{context}_discussion_topic_discussion_entry_mark_read"
         delete "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/entries/:entry_id/read", action: :mark_entry_unread, as: "#{context}_discussion_topic_discussion_entry_mark_unread"
 
+        get "#{context.pluralize}/:#{context}_id/discussion_topics/open_questions", action: :open_questions, as: "#{context}_discussion_topics_open_questions"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id", action: :show, as: "#{context}_discussion_topic"
         post "#{context.pluralize}/:#{context}_id/discussion_topics", controller: :discussion_topics, action: :create
         put "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id", controller: :discussion_topics, action: :update
@@ -1639,7 +1640,6 @@ CanvasRails::Application.routes.draw do
         delete "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id", controller: :discussion_topics, action: :destroy
 
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/view", action: :view, as: "#{context}_discussion_topic_view"
-        get "#{context.pluralize}/:#{context}_id/discussion_topics/open_questions", action: :open_questions, as: "#{context}_discussion_topics_open_questions"
         post "#{context.pluralize}/:#{context}_id/discussion_questions/:id/dismiss", action: :dismiss_question, as: "#{context}_discussion_question_dismiss"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary", action: :thread_summary, as: "#{context}_discussion_topic_thread_summary"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary/regenerate", action: :regenerate_thread_summary, as: "#{context}_discussion_topic_thread_summary_regenerate"
