@@ -152,6 +152,80 @@ RSpec.describe "Discussion thread summary response shapes", type: :request do
     end
   end
 
+  describe "anonymous discussion suppression (#36)" do
+    before do
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @anon_topic = @course.discussion_topics.create!(
+        title:           "Anonymous thread",
+        user:            @teacher,
+        anonymous_state: "full_anonymity"
+      )
+      @anon_topic.discussion_entries.create!(user: @teacher, message: "anon entry")
+    end
+
+    let(:anon_show_path) { "/api/v1/courses/#{@course.id}/discussion_topics/#{@anon_topic.id}" }
+    let(:anon_show_params) do
+      {
+        controller: "discussion_topics_api",
+        action:     "show",
+        format:     "json",
+        course_id:  @course.id.to_s,
+        topic_id:   @anon_topic.id.to_s
+      }
+    end
+    let(:anon_regenerate_path) do
+      "/api/v1/courses/#{@course.id}/discussion_topics/#{@anon_topic.id}/thread_summary/regenerate"
+    end
+    let(:anon_regenerate_params) do
+      {
+        controller: "discussion_topics_api",
+        action:     "regenerate_thread_summary",
+        format:     "json",
+        course_id:  @course.id.to_s,
+        topic_id:   @anon_topic.id.to_s
+      }
+    end
+
+    it "REST GET: returns null summary for an anonymous discussion even when the flag is on" do
+      @user = @student
+      json = api_call(:get, anon_show_path, anon_show_params)
+      expect(json["summary"]).to be_nil
+    end
+
+    it "POST regenerate: returns disabled, creates no summary row, emits no audit record" do
+      logged = []
+      allow(Rails.logger).to receive(:info) { |m| logged << m }
+
+      @user = @teacher
+      json = api_call(:post, anon_regenerate_path, anon_regenerate_params)
+
+      expect(json["status"]).to eq("disabled")
+      expect(json["enqueued"]).to be(false)
+      expect(@anon_topic.summaries.count).to eq(0)
+      audit = logged.select { |m| m.is_a?(String) && m.include?("generation_attempt") }
+      expect(audit).to be_empty
+    end
+
+    it "fetch_or_create_summary: anonymous topic returns suppressed result and writes no row" do
+      service = DiscussionThreadSummarizer::SummarizationService.new
+      result  = service.fetch_or_create_summary(
+        discussion_topic: @anon_topic,
+        viewer:           @teacher,
+        locale:           "en"
+      )
+      expect(@anon_topic.summaries.count).to eq(0)
+      expect(result.record).to be_nil
+    end
+
+    it "REST GET: non-anonymous discussion with same flag state still generates a summary" do
+      allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:preview)
+        .and_return(:allowed)
+      expect(DiscussionThreadSummarizer::SummarizationService).to receive(:enqueue_for)
+      @user = @student
+      api_call(:get, "/api/v1/courses/#{@course.id}/discussion_topics/#{@topic.id}", show_route_params)
+    end
+  end
+
   describe "GraphQL Discussion.summary" do
     it "returns null summary when the discussion_thread_summarizer flag is off" do
       @course.disable_feature!(:discussion_thread_summarizer)

@@ -59,6 +59,12 @@ module DiscussionThreadSummarizer
     # Cache-aware entrypoint: O(1) lookup by content hash + config version + locale.
     # On hit, returns stored summary without calling the model client.
     def fetch_or_create_summary(discussion_topic:, viewer:, locale: I18n.locale.to_s)
+      # v1 scope boundary: anonymous discussions cannot be summarized (identity privacy).
+      # Guard at every generation entry point; TopicSummaryEmbed has defense-in-depth.
+      if discussion_topic.anonymous?
+        return CacheResult.new(status: :rate_limited, record: nil, result: nil)
+      end
+
       course = discussion_topic.context
       unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
         # Defense-in-depth flag gate mirroring #lookup_for_render guard. Production
@@ -119,6 +125,9 @@ module DiscussionThreadSummarizer
     # Manual regeneration entrypoint: consumes cooldown/quota budget via .check,
     # then enqueues a background job. Does not block on generation.
     def request_regenerate(discussion_topic:, viewer:, locale: I18n.locale.to_s)
+      # v1 scope boundary: match fetch_or_create_summary guard (identity privacy).
+      return RegenerateResult.new(status: :disabled) if discussion_topic.anonymous?
+
       course = discussion_topic.context
       unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
         return RegenerateResult.new(status: :disabled)
