@@ -966,3 +966,6 @@ User-scoped open-question dismissals landed in PR #125 on the existing feature f
 | 29 | [#30](https://github.com/ejgdr/canvas-lms/issues/30) | [#126](https://github.com/ejgdr/canvas-lms/pull/126) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web yarn test ui/features/discussion_topics_index/react/components/__tests__/OpenQuestionsDigest.test.tsx --run` |
 | 29 | [#31](https://github.com/ejgdr/canvas-lms/issues/31) | [#126](https://github.com/ejgdr/canvas-lms/pull/126) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web yarn test ui/features/discussion_topics_index/react/components/__tests__/OpenQuestionsDigest.test.tsx --run` |
 | 29 | [#32](https://github.com/ejgdr/canvas-lms/issues/32) | [#126](https://github.com/ejgdr/canvas-lms/pull/126) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web yarn test ui/features/discussion_topics_index/react/components/__tests__/OpenQuestionsDigest.test.tsx --run` |
+| 30 | [#33](https://github.com/ejgdr/canvas-lms/issues/33) | [#127](https://github.com/ejgdr/canvas-lms/pull/127) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bin/rspec spec/apis/v1/open_questions_digest_spec.rb --format documentation` |
+
+M5 (Open Questions digest) complete — #28/#29/#34 (PR #125), #30/#31/#32 (PR #126), #33 (PR #127). Milestone closed.
