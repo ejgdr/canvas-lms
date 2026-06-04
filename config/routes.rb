@@ -1639,6 +1639,8 @@ CanvasRails::Application.routes.draw do
         delete "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id", controller: :discussion_topics, action: :destroy
 
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/view", action: :view, as: "#{context}_discussion_topic_view"
+        get "#{context.pluralize}/:#{context}_id/discussion_topics/open_questions", action: :open_questions, as: "#{context}_discussion_topics_open_questions"
+        post "#{context.pluralize}/:#{context}_id/discussion_questions/:id/dismiss", action: :dismiss_question, as: "#{context}_discussion_question_dismiss"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary", action: :thread_summary, as: "#{context}_discussion_topic_thread_summary"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary/regenerate", action: :regenerate_thread_summary, as: "#{context}_discussion_topic_thread_summary_regenerate"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_summary, as: "#{context}_discussion_topic_summary"

@@ -29,7 +29,7 @@ class DiscussionTopicsApiController < ApplicationController
   include LocaleSelection
 
   before_action :require_context_and_read_access
-  before_action :require_topic, except: %i[mark_all_topic_read migrate_disallow update_discussion_types]
+  before_action :require_topic, except: %i[mark_all_topic_read migrate_disallow update_discussion_types open_questions dismiss_question]
   before_action :require_initial_post, except: %i[add_entry
                                                   mark_topic_read
                                                   mark_topic_unread
@@ -38,6 +38,8 @@ class DiscussionTopicsApiController < ApplicationController
                                                   show
                                                   unsubscribe_topic
                                                   update_discussion_types
+                                                  open_questions
+                                                  dismiss_question
                                                   accessibility_scan
                                                   accessibility_queue_scan]
   before_action only: %i[replies
@@ -155,6 +157,58 @@ class DiscussionTopicsApiController < ApplicationController
     )
 
     render(json: thread_summary_json(result))
+  end
+
+  # @API Open Questions Digest
+  # Returns unanswered question replies across active discussions in the course,
+  # ordered oldest-first.
+  def open_questions
+    ensure_open_questions_enabled!
+    return render_unauthorized_action unless @context.grants_right?(@current_user, session, :moderate_forum)
+
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    questions = Api.paginate(
+      DiscussionEntry.open_questions_for_course(@context).preload(:discussion_topic),
+      self,
+      open_questions_pagination_url(@context)
+    )
+    response = questions.map do |question|
+      {
+        question_id: question.id,
+        thread_id: question.discussion_topic_id,
+        thread_title: question.discussion_topic.title,
+        question_text: question.message,
+        created_at: question.created_at.iso8601,
+        deep_link: polymorphic_url([@context, :discussion_topic], id: question.discussion_topic_id, anchor: "entry-#{question.id}", entry_id: question.id)
+      }
+    end
+
+    digest_metric_tags = digest_metric_tags_for(@context)
+    InstStatsd::Statsd.increment("discussion_thread_summarizer.digest_view", tags: digest_metric_tags)
+    InstStatsd::Statsd.timing(
+      "discussion_thread_summarizer.digest_view.duration",
+      ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round,
+      tags: digest_metric_tags
+    )
+
+    render json: response
+  end
+
+  # @API Dismiss Open Question
+  # Marks a digest entry as addressed offline so it no longer appears in the
+  # digest for the course.
+  def dismiss_question
+    ensure_open_questions_enabled!
+    return render_unauthorized_action unless @context.grants_right?(@current_user, session, :moderate_forum)
+
+    question = DiscussionEntry.open_question_candidates_for_course(@context).find(params[:id])
+    DiscussionQuestionDismissal.create_or_find_by!(discussion_entry: question) do |dismissal|
+      dismissal.user = @current_user
+    end
+
+    InstStatsd::Statsd.increment("discussion_thread_summarizer.question_dismissed", tags: digest_metric_tags_for(@context))
+
+    head :no_content
   end
 
   # @API Regenerate thread summary (Discussion Thread Summarizer)
@@ -1351,6 +1405,25 @@ class DiscussionTopicsApiController < ApplicationController
     opts = {}
     opts[:forced] = value_to_boolean(params[:forced_read_state]) if params.key?(:forced_read_state)
     opts
+  end
+
+  def ensure_open_questions_enabled!
+    raise ActiveRecord::RecordNotFound unless @context.is_a?(Course) && @context.feature_enabled?(:discussion_thread_summarizer)
+  end
+
+  def digest_metric_tags_for(context)
+    {
+      account_id: context.root_account_id,
+      scope_mode: discussion_thread_summarizer_scope_mode(context)
+    }
+  end
+
+  def discussion_thread_summarizer_scope_mode(context)
+    context.root_account.feature_enabled?(:discussion_thread_summarizer_scope_limited) ? "limited" : "default"
+  end
+
+  def open_questions_pagination_url(context)
+    request.url
   end
 
   def change_topic_all_read_state(new_state)
