@@ -45,7 +45,7 @@ class DiscussionEntry < ApplicationRecord
   has_many :discussion_topic_insight_entries, class_name: "DiscussionTopicInsight::Entry", inverse_of: :discussion_entry
   has_one :last_discussion_subentry, -> { order(created_at: :desc) }, class_name: "DiscussionEntry", foreign_key: "root_entry_id", inverse_of: :root_entry
   belongs_to :discussion_topic, inverse_of: :discussion_entries
-  has_one :discussion_question_dismissal, dependent: :destroy, inverse_of: :discussion_entry
+  has_many :discussion_question_dismissals, dependent: :destroy, inverse_of: :discussion_entry
   belongs_to :quoted_entry, class_name: "DiscussionEntry"
   # null if a root entry
   belongs_to :parent_entry, class_name: "DiscussionEntry", foreign_key: :parent_id, inverse_of: :discussion_subentries
@@ -94,8 +94,8 @@ class DiscussionEntry < ApplicationRecord
       .where.missing(:active_discussion_subentries)
       .order(:created_at, :id)
   end
-  scope :open_questions_for_course, ->(course) do
-    open_question_candidates_for_course(course).where.missing(:discussion_question_dismissal)
+  scope :open_questions_for_course, ->(course, user) do
+    open_question_candidates_for_course(course).where.not(id: DiscussionQuestionDismissal.where(user:).select(:discussion_entry_id))
   end
 
   module PinningTypes

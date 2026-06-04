@@ -18,10 +18,10 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class DiscussionQuestionDismissal < ApplicationRecord
-  belongs_to :discussion_entry, inverse_of: :discussion_question_dismissal
+  belongs_to :discussion_entry, inverse_of: :discussion_question_dismissals
   belongs_to :user
 
   validates :discussion_entry_id, presence: true
-  validates :discussion_entry_id, uniqueness: true
+  validates :discussion_entry_id, uniqueness: { scope: :user_id }
   validates :user_id, presence: true
 end

@@ -168,7 +168,7 @@ class DiscussionTopicsApiController < ApplicationController
 
     started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     questions = Api.paginate(
-      DiscussionEntry.open_questions_for_course(@context).preload(:discussion_topic),
+      DiscussionEntry.open_questions_for_course(@context, @current_user).preload(:discussion_topic),
       self,
       open_questions_pagination_url(@context)
     )
@@ -202,9 +202,7 @@ class DiscussionTopicsApiController < ApplicationController
     return render_unauthorized_action unless @context.grants_right?(@current_user, session, :moderate_forum)
 
     question = DiscussionEntry.open_question_candidates_for_course(@context).find(params[:id])
-    DiscussionQuestionDismissal.create_or_find_by!(discussion_entry: question) do |dismissal|
-      dismissal.user = @current_user
-    end
+    DiscussionQuestionDismissal.create_or_find_by!(discussion_entry: question, user: @current_user)
 
     InstStatsd::Statsd.increment("discussion_thread_summarizer.question_dismissed", tags: digest_metric_tags_for(@context))
 

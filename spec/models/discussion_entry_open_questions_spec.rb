@@ -47,7 +47,7 @@ describe DiscussionEntry do
       out_of_course_topic = @other_course.discussion_topics.create!(title: "other course", user: @teacher)
       out_of_course_question = out_of_course_topic.discussion_entries.create!(user: @student, message: "When is this due?")
 
-      results = described_class.open_questions_for_course(@course).preload(:discussion_topic).to_a
+      results = described_class.open_questions_for_course(@course, @teacher).preload(:discussion_topic).to_a
 
       expect(results.map(&:id)).to eq([newer_question.id])
       expect(results).not_to include(dismissed_question, out_of_course_question)

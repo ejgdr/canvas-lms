@@ -1773,6 +1773,16 @@ describe DiscussionTopicsApiController do
       get "open_questions", params: { course_id: @course.id, user_id: @teacher.id }, format: "json"
 
       expect(response).to have_http_status :not_found
+      expect(response.body).not_to include("question_id")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with(
+        "discussion_thread_summarizer.digest_view",
+        anything
+      )
+      expect(InstStatsd::Statsd).not_to have_received(:timing).with(
+        "discussion_thread_summarizer.digest_view.duration",
+        anything,
+        anything
+      )
     end
 
     it "returns the digest for a moderator and emits view metrics" do
@@ -1809,7 +1819,7 @@ describe DiscussionTopicsApiController do
       post "dismiss_question", params: { course_id: @course.id, id: @newer_question.id, user_id: @teacher.id }, format: "json"
 
       expect(response).to have_http_status :no_content
-      expect(DiscussionQuestionDismissal.find_by(discussion_entry: @newer_question)).to be_present
+      expect(DiscussionQuestionDismissal.find_by(discussion_entry: @newer_question, user: @teacher)).to be_present
       expect(InstStatsd::Statsd).to have_received(:increment).with(
         "discussion_thread_summarizer.question_dismissed",
         tags: { account_id: @course.root_account_id, scope_mode: "default" }
