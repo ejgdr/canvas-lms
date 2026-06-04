@@ -668,6 +668,38 @@ describe DiscussionTopicsController do
         expect(assigns[:js_env][:CAN_MANAGE_DIFFERENTIATION_TAGS]).to be false
       end
     end
+
+    context "discussion_thread_summarizer_enabled js_env on index" do
+      before { user_session(@teacher) }
+
+      it "is true when the feature is enabled for the course" do
+        @course.enable_feature!(:discussion_thread_summarizer)
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(true)
+      end
+
+      it "is false when the feature is disabled for the course" do
+        @course.disable_feature!(:discussion_thread_summarizer)
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:discussion_thread_summarizer_enabled]).to be(false)
+      end
+
+      it "exposes COURSE_ID in js_env" do
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:COURSE_ID]).to eq(@course.id.to_s)
+      end
+
+      it "exposes permissions.moderate as true for a teacher" do
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:permissions][:moderate]).to be(true)
+      end
+
+      it "exposes permissions.moderate as false for a student" do
+        user_session(@student)
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:permissions][:moderate]).to be(false)
+      end
+    end
   end
 
   describe "GET 'show'" do

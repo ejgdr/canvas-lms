@@ -58,6 +58,7 @@ import {CONTENT_SHARE_TYPES} from '@canvas/content-sharing/react/proptypes/conte
 import {WithBreakpoints} from '@instructure/platform-with-breakpoints'
 import TopNavPortalWithDefaults from '@canvas/top-navigation/react/TopNavPortalWithDefaults'
 import ManageThreadedReplies from './ManageThreadedReplies'
+import {OpenQuestionsDigest} from './OpenQuestionsDigest'
 
 const I18n = createI18nScope('discussions_v2')
 
@@ -456,6 +457,8 @@ export default class DiscussionsIndex extends Component {
                 mobileOnly={this.props.breakpoints.mobileOnly}
               />
             )}
+
+          <OpenQuestionsDigest />
 
           {/* @ts-expect-error TS2339 (typescriptify) */}
           {this.props.isLoadingDiscussions
