@@ -21,6 +21,7 @@ export interface ThreadSummaryPayload {
   viewpoints?: string[]
   open_questions?: string[]
   scope_mode?: string
+  disclosure?: string | null
 }
 
 /**

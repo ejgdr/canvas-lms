@@ -85,19 +85,32 @@ module DiscussionThreadSummarizer
       Setting.get(SETTING_KEY, DEFAULT_WORD_THRESHOLD.to_s).to_i
     end
 
+    def scope_mode_for
+      account = @topic.context&.root_account
+      return "default" unless account
+
+      account.feature_enabled?(:discussion_thread_summarizer_scope_limited) ? "limited" : "default"
+    end
+
     def word_delta(before, after)
       count = ->(msg) { HtmlTextHelper.strip_tags(msg.to_s).split.size }
       (count.call(after) - count.call(before)).abs
     end
 
     def rekey_summaries
-      new_hash = ContentVersionHash.call(@topic)
+      # In scope-limited mode, rows encode viewer.id and cannot be safely rekeyed
+      # without a viewer (the viewer isn't available in this invalidation context).
+      # Let them orphan — lookup_for_render will detect the hash mismatch and
+      # treat them as stale, triggering per-viewer regeneration on next access.
+      return if scope_mode_for == "limited"
+
       # NOTE: Rekey updates dynamic_content_hash to the post-edit content hash
       # even though the stored summary text was generated from the pre-edit content.
       # This is the intended behavior per #17 AC: below-threshold edits do not
       # trigger regeneration. The hash semantically means "the content this summary
       # is considered current for", not "the content this summary was generated from".
       # See https://github.com/ejgdr/canvas-lms/issues/17 for the threshold definition.
+      new_hash = ContentVersionHash.call(@topic, scope_mode: "default")
       @topic.summaries
             .where(
               llm_config_version: SummarizationService::LLM_CONFIG_VERSION,

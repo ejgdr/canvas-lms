@@ -71,7 +71,8 @@ module DiscussionThreadSummarizer
       end
 
       account      = discussion_topic.context.root_account
-      content_hash = ContentVersionHash.call(discussion_topic)
+      scope_mode   = scope_mode_for(discussion_topic)
+      content_hash = ContentVersionHash.call(discussion_topic, scope_mode:, viewer:)
       cached       = find_cached_summary(discussion_topic, content_hash, locale)
 
       if cached
@@ -103,7 +104,6 @@ module DiscussionThreadSummarizer
       end
 
       DiscussionThreadSummarizer::Metrics.increment_rate_limit_allowed(account:)
-      scope_mode = scope_mode_for(discussion_topic)
       DiscussionThreadSummarizer::Metrics.increment_generation_attempt(account:, scope_mode:)
       result = summarize(discussion_topic:, viewer:)
       record = persist_summary_record(
@@ -155,9 +155,10 @@ module DiscussionThreadSummarizer
         return RenderResult.new(status: :disabled, record: nil, result: nil, enqueued: false)
       end
 
-      account = discussion_topic.context.root_account
-      record      = find_latest_summary_row(discussion_topic, locale)
-      current_hash = ContentVersionHash.call(discussion_topic)
+      account      = discussion_topic.context.root_account
+      scope_mode   = scope_mode_for(discussion_topic)
+      record       = find_latest_summary_row(discussion_topic, locale)
+      current_hash = ContentVersionHash.call(discussion_topic, scope_mode:, viewer:)
 
       # NOTE: This is the render-time lookup. Distinct from #fetch_or_create_summary
       # (cache miss path that actually invokes the model). Read-only with respect to
@@ -207,6 +208,13 @@ module DiscussionThreadSummarizer
       end
       latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round
       Metrics.record_generation_latency_ms(duration_ms: latency_ms, account:, scope_mode:)
+
+      # Add disclosure when scope is limited so the frontend can surface it (FR-5).
+      # Derives from the request payload's scope_mode, not the model's echoed field,
+      # to avoid trusting model output for access-control messaging.
+      if payload[:scope_mode] == "limited"
+        result = result.merge(disclosure: "Based on instructor posts and your posts only")
+      end
       result
     rescue StandardError => e
       unless e.is_a?(DiscussionThreadSummarizer::SchemaViolationError)
@@ -269,12 +277,12 @@ module DiscussionThreadSummarizer
     end
 
     def find_cached_summary(discussion_topic, content_hash, locale)
-      # NOTE: Cache key assumes discussion_thread_summarizer_scope_limited is OFF.
-      # When enabled, gather filters entries by viewer while ContentVersionHash hashes
-      # the unfiltered .active set, so this key can return cross-viewer wrong results.
-      # Before enabling scope_limited in production, add scope_mode to the cache key
-      # or include viewer-filtered entry IDs in the hash. Tracked in
-      # https://github.com/ejgdr/canvas-lms/issues/85.
+      # Cache key: (llm_config_version, dynamic_content_hash, parent_id, locale).
+      # Default mode: content_hash is viewer-agnostic — one shared row per topic.
+      # Scope-limited mode: content_hash encodes viewer.id so every viewer gets an
+      # isolated row; serving viewer B the row created for viewer A is prevented.
+      # Remaining optimization (shared row for viewers with identical allowed entry
+      # sets) tracked in https://github.com/ejgdr/canvas-lms/issues/85.
       discussion_topic.summaries
                       .where(
                         llm_config_version: LLM_CONFIG_VERSION,

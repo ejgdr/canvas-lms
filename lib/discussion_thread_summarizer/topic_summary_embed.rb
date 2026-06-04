@@ -68,10 +68,12 @@ module DiscussionThreadSummarizer
         record = result.record
         return nil unless record
 
+        parsed = result.result
         {
-          text: format_summary_text(result.result),
+          text: format_summary_text(parsed),
           status: api_status_for(result.status),
-          generated_at: record.created_at
+          generated_at: record.created_at,
+          disclosure: parsed&.dig(:disclosure) || parsed&.dig("disclosure")
         }
       end
     end

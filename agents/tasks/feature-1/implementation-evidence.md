@@ -969,3 +969,12 @@ User-scoped open-question dismissals landed in PR #125 on the existing feature f
 | 30 | [#33](https://github.com/ejgdr/canvas-lms/issues/33) | [#127](https://github.com/ejgdr/canvas-lms/pull/127) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bin/rspec spec/apis/v1/open_questions_digest_spec.rb --format documentation` |
 
 M5 (Open Questions digest) complete — #28/#29/#34 (PR #125), #30/#31/#32 (PR #126), #33 (PR #127). Milestone closed.
+
+## M6
+
+Scope-limited mode end-to-end: per-viewer ContentVersionHash (viewer.id folded in for limited mode; default mode preserves original viewer-agnostic digest), disclosure label in result and ThreadSummaryBlock UI, CacheInvalidation skips rekey in limited mode so per-viewer rows orphan safely. scope_filter_spec.rb covers filter, disclosure, per-viewer isolation, and TA inclusion.
+
+| Cycle | Issue | PR | Flag | QA | Reproduce |
+|---|---|---|---|---|---|
+| 31 | [#35](https://github.com/ejgdr/canvas-lms/issues/35) | [#128](https://github.com/ejgdr/canvas-lms/pull/128) | `discussion_thread_summarizer_scope_limited` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/scope_filter_spec.rb --format documentation` |
+| 31 | [#39](https://github.com/ejgdr/canvas-lms/issues/39) | [#128](https://github.com/ejgdr/canvas-lms/pull/128) | `discussion_thread_summarizer_scope_limited` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/scope_filter_spec.rb --format documentation` |
