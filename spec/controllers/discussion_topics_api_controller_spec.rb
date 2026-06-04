@@ -1751,4 +1751,79 @@ describe DiscussionTopicsApiController do
       expect(summary["text"]).to include("Main theme A")
     end
   end
+
+  context "open_questions and dismiss_question" do
+    before do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @older_topic = @course.discussion_topics.create!(title: "older", user: @teacher)
+      @newer_topic = @course.discussion_topics.create!(title: "newer", user: @teacher)
+      @older_question = @older_topic.discussion_entries.create!(user: @student, message: "How do I submit this?", created_at: 2.days.ago, updated_at: 2.days.ago)
+      @newer_question = @newer_topic.discussion_entries.create!(user: @student, message: "What does this require?", created_at: 1.day.ago, updated_at: 1.day.ago)
+      @older_topic.discussion_entries.create!(user: @teacher, parent_entry: @older_question, message: "Use the course page")
+      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:timing)
+      user_session(@teacher)
+    end
+
+    it "returns 404 when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+
+      get "open_questions", params: { course_id: @course.id, user_id: @teacher.id }, format: "json"
+
+      expect(response).to have_http_status :not_found
+      expect(response.body).not_to include("question_id")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with(
+        "discussion_thread_summarizer.digest_view",
+        anything
+      )
+      expect(InstStatsd::Statsd).not_to have_received(:timing).with(
+        "discussion_thread_summarizer.digest_view.duration",
+        anything,
+        anything
+      )
+    end
+
+    it "returns the digest for a moderator and emits view metrics" do
+      get "open_questions", params: { course_id: @course.id, user_id: @teacher.id }, format: "json"
+
+      expect(response).to be_successful
+      expect(response.parsed_body.map { |row| row["question_id"] }).to eq([@newer_question.id])
+      expect(response.parsed_body.first["thread_id"]).to eq(@newer_topic.id)
+      expect(response.parsed_body.first["thread_title"]).to eq("newer")
+      expect(response.parsed_body.first["question_text"]).to eq("What does this require?")
+      expect(response.parsed_body.first["created_at"]).to be_present
+      expect(response.parsed_body.first["deep_link"]).to be_present
+      expect(InstStatsd::Statsd).to have_received(:increment).with(
+        "discussion_thread_summarizer.digest_view",
+        tags: { account_id: @course.root_account_id, scope_mode: "default" }
+      )
+      expect(InstStatsd::Statsd).to have_received(:timing).with(
+        "discussion_thread_summarizer.digest_view.duration",
+        kind_of(Numeric),
+        tags: { account_id: @course.root_account_id, scope_mode: "default" }
+      )
+    end
+
+    it "returns unauthorized for a user without :moderate_forum" do
+      user_session(@student)
+
+      get "open_questions", params: { course_id: @course.id, user_id: @student.id }, format: "json"
+
+      expect(response).to have_http_status :forbidden
+      expect(response.parsed_body["status"]).to eq("unauthorized")
+    end
+
+    it "dismisses a question and emits the dismissal metric" do
+      post "dismiss_question", params: { course_id: @course.id, id: @newer_question.id, user_id: @teacher.id }, format: "json"
+
+      expect(response).to have_http_status :no_content
+      expect(DiscussionQuestionDismissal.find_by(discussion_entry: @newer_question, user: @teacher)).to be_present
+      expect(InstStatsd::Statsd).to have_received(:increment).with(
+        "discussion_thread_summarizer.question_dismissed",
+        tags: { account_id: @course.root_account_id, scope_mode: "default" }
+      )
+    end
+  end
 end

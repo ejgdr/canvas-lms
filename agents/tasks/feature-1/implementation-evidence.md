@@ -953,3 +953,13 @@ When flag off, `#fetch_or_create_summary` returns `CacheResult.new(status: :rate
 | Completion PR | pending | This doc records board transitions and closure trail for Cycle 27 | 2026-05-31T05:41:00Z |
 
 *Last verified (Cycle 27 completion row): pending completion PR merge*
+
+## M5
+
+User-scoped open-question dismissals landed in PR #125 on the existing feature flag, with moderator-only access and InstStatsd tags matching the summarizer pipeline.
+
+| Cycle | Issue | PR | Flag | QA | Reproduce |
+|---|---|---|---|---|---|
+| 28 | [#28](https://github.com/ejgdr/canvas-lms/issues/28) | [#125](https://github.com/ejgdr/canvas-lms/pull/125) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/models/discussion_entry_open_questions_spec.rb spec/controllers/discussion_topics_api_controller_spec.rb` |
+| 28 | [#29](https://github.com/ejgdr/canvas-lms/issues/29) | [#125](https://github.com/ejgdr/canvas-lms/pull/125) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/models/discussion_entry_open_questions_spec.rb spec/controllers/discussion_topics_api_controller_spec.rb` |
+| 28 | [#34](https://github.com/ejgdr/canvas-lms/issues/34) | [#125](https://github.com/ejgdr/canvas-lms/pull/125) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/models/discussion_entry_open_questions_spec.rb spec/controllers/discussion_topics_api_controller_spec.rb` |
