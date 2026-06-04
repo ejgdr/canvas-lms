@@ -47,6 +47,9 @@ module DiscussionThreadSummarizer
       return OMIT unless course.is_a?(Course) && course.feature_enabled?(:discussion_thread_summarizer)
       return nil unless discussion_topic.visible_for?(viewer)
       return nil unless discussion_topic.user_can_see_posts?(viewer, session)
+      # v1 scope boundary: anonymous discussions cannot be summarized (identity privacy).
+      # Suppressed here so no generation job is enqueued and API clients receive null.
+      return nil if discussion_topic.anonymous?
 
       result = SummarizationService.new.lookup_for_render(
         discussion_topic:,
