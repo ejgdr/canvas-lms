@@ -93,11 +93,18 @@ module DiscussionThreadSummarizer
 
       DiscussionThreadSummarizer::Metrics.increment_cache_miss(account:)
 
+      # Circuit check before rate-limiter: an open circuit means no generation will
+      # happen, so do not burn the user's cooldown/quota budget for a no-op attempt.
+      # Cache hits bypass both the circuit and the limiter (no model call either way).
+      if Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
+        return CacheResult.new(status: :unavailable, record: nil, result: nil)
+      end
+
       # NOTE: The rekey path in DiscussionThreadSummarizer::CacheInvalidation does NOT
       # pass through this gate — rekey is a metadata-only UPDATE that never invokes the
       # model, so it must not consume cooldown or daily-quota budget. The limiter is
-      # only consulted on the cache-miss path of #fetch_or_create_summary, immediately
-      # before #summarize. Cache hits also bypass the limiter (no model call).
+      # only consulted on the cache-miss path of #fetch_or_create_summary, after the
+      # circuit check and before #summarize. Cache hits bypass the limiter (no model call).
       #
       # Redis-down posture: fail-closed — matches InstLLMHelper behavior verified at
       # app/helpers/inst_llm_helper.rb:41 during Cycle 18 (raises when Redis disabled).
@@ -111,10 +118,6 @@ module DiscussionThreadSummarizer
       end
 
       DiscussionThreadSummarizer::Metrics.increment_rate_limit_allowed(account:)
-
-      if Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
-        return CacheResult.new(status: :unavailable, record: nil, result: nil)
-      end
 
       DiscussionThreadSummarizer::Metrics.increment_generation_attempt(account:, scope_mode:)
       result = summarize(discussion_topic:, viewer:)
@@ -173,9 +176,9 @@ module DiscussionThreadSummarizer
       account      = discussion_topic.context.root_account
       scope_mode   = scope_mode_for(discussion_topic)
 
-      if Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
-        return RenderResult.new(status: :unavailable, record: nil, result: nil, enqueued: false)
-      end
+      # Evaluate circuit state once and reuse below. The breaker short-circuits
+      # *generation* only — cached reads are always served regardless of state.
+      circuit_open = Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
 
       record       = find_latest_summary_row(discussion_topic, locale)
       current_hash = ContentVersionHash.call(discussion_topic, scope_mode:, viewer:)
@@ -184,8 +187,8 @@ module DiscussionThreadSummarizer
       # (cache miss path that actually invokes the model). Read-only with respect to
       # the model and rate-limit budget — uses RegenerationRateLimiter.preview, never
       # .check. Enqueue happens here when state is :stale or :generating AND preview
-      # allows. The job's miss path will consult .check authoritatively; race between
-      # preview-allow and job-deny is acceptable (one-cycle delay).
+      # allows AND the circuit is closed. The job's miss path will consult .check
+      # authoritatively; race between preview-allow and job-deny is acceptable.
       #
       # Hash race: ContentVersionHash.call(topic) is computed after the row fetch.
       # Concurrent entry edits can make :current appear :stale (or vice versa) for
@@ -197,8 +200,14 @@ module DiscussionThreadSummarizer
       # runs fetch_or_create_summary with the viewer/locale from whichever enqueue won.
 
       if record.nil?
+        if circuit_open
+          # No cached row and cannot generate — surface unavailable inline.
+          # Never enqueue a job while circuit is open.
+          return RenderResult.new(status: :unavailable, record: nil, result: nil, enqueued: false)
+        end
         build_generating_or_rate_limited_empty(discussion_topic:, viewer:, locale:, account:)
       elsif record.dynamic_content_hash == current_hash
+        # Current row — serve regardless of circuit state; no generation needed.
         DiscussionThreadSummarizer::Metrics.increment_render_current(account:)
         RenderResult.new(
           status: :current,
@@ -206,6 +215,13 @@ module DiscussionThreadSummarizer
           result: parse_summary_record(record),
           enqueued: false
         )
+      elsif circuit_open
+        # Stale row exists. Serve the cached content; do not enqueue a refresh
+        # job while the circuit is open (breaker blocks generation, not reads).
+        parsed = parse_summary_record(record)
+        DiscussionThreadSummarizer::Metrics.increment_render_stale(account:)
+        DiscussionThreadSummarizer::Metrics.increment_cache_stale(account:)
+        RenderResult.new(status: :stale, record:, result: parsed, enqueued: false)
       else
         build_stale_or_rate_limited_stale(discussion_topic:, viewer:, locale:, account:, record:)
       end

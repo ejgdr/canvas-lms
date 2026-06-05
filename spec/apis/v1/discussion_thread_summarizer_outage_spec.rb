@@ -24,6 +24,13 @@ require_relative "../api_spec_helper"
 # Drives the real thread_summary render route (GET) via api_call.
 # Injects a stub client that raises TransportError to trigger failure recording.
 # Asserts degraded-but-not-500 behavior and circuit-open short-circuiting.
+#
+# Contracts encoded here (Cycle 37 #50 depends on them):
+#   - Single transient failure (circuit still closed): render returns :generating.
+#   - N consecutive failures: circuit opens; subsequent render returns :unavailable.
+#   - An existing current/stale cached row is always served — open circuit blocks
+#     generation, not reads.
+#   - Open circuit never produces an HTTP error or error envelope in the JSON body.
 RSpec.describe "Discussion thread summarizer outage path (M8 gate, #49)", type: :request do
   # ── Route recognition guard ──────────────────────────────────────────────────
   # Guards against a future route reorder silently re-breaking this gate.
@@ -58,12 +65,12 @@ RSpec.describe "Discussion thread summarizer outage path (M8 gate, #49)", type: 
     # Force-load SchemaViolationError so error_category_for in summarize#ensure
     # can reference it without a NameError (mirrors summarization_service_spec.rb).
     DiscussionThreadSummarizer::OutputSchemaValidator
-    # Rate limiter: always allow so the model client is reached.
+    # Rate limiter: always allow so requests reach the model client / circuit check.
     allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:check)
       .and_return(:allowed)
     allow(DiscussionThreadSummarizer::RegenerationRateLimiter).to receive(:preview)
       .and_return(:allowed)
-    # Reset circuit state between examples.
+    # Reset circuit state between examples (real Redis).
     DiscussionThreadSummarizer::CircuitBreaker.reset!(account: @course.root_account)
     # Suppress audit log noise.
     allow(Rails.logger).to receive(:info)
@@ -82,82 +89,146 @@ RSpec.describe "Discussion thread summarizer outage path (M8 gate, #49)", type: 
     }
   end
 
-  # ── Example 1: TransportError → HTTP 200, generation_error incremented ────
-  # Drives the real GET route. Generation runs via run_jobs (async path).
-  it "TransportError emits generation_error metric and the thread endpoint returns HTTP 200" do
+  # Helper: drive one generation failure through the real async path.
+  # enqueue_for → run_jobs (raises TransportError) → failed_at set on the job.
+  # After failure, the singleton is released (failed_at IS NULL check in DJ),
+  # so the next call can enqueue a new job.
+  def drive_one_failure
+    DiscussionThreadSummarizer::SummarizationService.enqueue_for(
+      discussion_topic: @topic,
+      viewer:           @teacher
+    )
+    run_jobs rescue nil
+  end
+
+  # ── Example 1: single TransportError — circuit still closed ───────────────
+  # One failure does NOT open the circuit (threshold default = 5). The render
+  # path returns :generating (job enqueued, no cached row). The generation_error
+  # metric fires from the job, and the thread endpoint always returns HTTP 200.
+  it "single TransportError: GET returns HTTP 200 with status 'generating', generation_error metric fires" do
     allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize)
       .and_raise(DiscussionThreadSummarizer::TransportError, "connection refused")
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_open)
 
-    # Capture generation_error calls via spy so we can assert after run_jobs.
     error_increments = 0
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_generation_error) do
       error_increments += 1
     end
 
-    # First GET enqueues the generation job.
-    api_call(:get, render_path, render_params)
+    # GET enqueues the generation job (circuit closed, no cached row → :generating).
+    json = api_call(:get, render_path, render_params)
     expect(response).to have_http_status(:ok)
+    # Single failure: circuit stays closed; no cached row → :generating.
+    expect(json["status"]).to eq("generating")
+    expect(json).not_to have_key("error")
+    expect(json).not_to have_key("errors")
 
     # Run the job — TransportError fires; generation_error incremented.
     run_jobs rescue nil
-
     expect(error_increments).to be >= 1
-
-    # After the job fails the circuit may be open; a subsequent GET must be 200
-    # with no error envelope.
-    json = api_call(:get, render_path, render_params)
-    expect(response).to have_http_status(:ok)
-    expect(json).not_to have_key("error")
-    expect(json).not_to have_key("errors")
   end
 
-  # ── Example 2: circuit opens after N failures → skips client ─────────────
-  # Opens the circuit directly via record_failure (avoids DJ singleton-dedup
-  # complexity when driving N sequential failures through run_jobs).
-  it "after N consecutive failures the circuit opens and subsequent calls skip the client" do
+  # ── Example 2: N consecutive failures → circuit opens → client skipped ────
+  # Drives N real TransportError raises through enqueue_for + run_jobs (real
+  # async path). After the Nth failure record_failure opens the circuit. The
+  # subsequent GET short-circuits in lookup_for_render without calling the
+  # client at all.
+  it "after N consecutive failures the circuit opens and subsequent GET skips the client" do
     threshold = DiscussionThreadSummarizer::CircuitBreaker::DEFAULT_FAILURE_THRESHOLD.to_i
 
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_open)
 
-    # Drive N failures to open the circuit.
-    threshold.times do
-      DiscussionThreadSummarizer::CircuitBreaker.record_failure(
-        account:    @course.root_account,
-        scope_mode: "default"
-      )
+    # Count all client invocations during the failure-driving phase.
+    failure_calls = 0
+    allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize) do
+      failure_calls += 1
+      raise DiscussionThreadSummarizer::TransportError, "service down"
     end
 
+    # Drive N real failures through the async path.
+    threshold.times { drive_one_failure }
+
+    expect(failure_calls).to eq(threshold)
     expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_circuit_open)
       .at_least(:once)
 
-    # Track client invocations — must not increase once circuit is open.
-    call_count = 0
+    # Override stub: any post-open call would indicate the breaker didn't fire.
+    post_open_calls = 0
     allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize) do
-      call_count += 1
+      post_open_calls += 1
       DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE
     end
 
-    # Circuit is open. GET /thread_summary must return HTTP 200 with status
-    # "unavailable" and must NOT invoke the model client.
+    # Circuit is open. GET must short-circuit: HTTP 200, unavailable, no client call.
     json = api_call(:get, render_path, render_params)
     expect(response).to have_http_status(:ok)
     expect(json["status"]).to eq("unavailable")
-    expect(call_count).to eq(0),
-      "expected model client NOT to be called when circuit is open, " \
-      "but got #{call_count} call(s)"
+    expect(json).not_to have_key("error")
+    expect(json).not_to have_key("errors")
+    expect(post_open_calls).to eq(0),
+      "model client must not be called when circuit is open (got #{post_open_calls} call(s))"
   end
 
-  # ── Example 3: no error envelope (inline unavailable only) ───────────────
+  # ── Example 3: open circuit serves existing cached row unchanged ──────────
+  # Verifies Fix 1 AC: "the thread renders normally while the circuit is open."
+  # An existing :current summary must be served even when the breaker is open.
+  it "open circuit serves an existing current cached row without calling the client" do
+    # Seed a cached summary row for @topic by running one successful generation.
+    DiscussionThreadSummarizer::SummarizationService.enqueue_for(
+      discussion_topic: @topic,
+      viewer:           @teacher
+    )
+    run_jobs
+    expect(@topic.summaries.count).to eq(1)
+
+    # Drive failures through a separate "burner" topic so fetch_or_create_summary
+    # always misses the cache (no row for the burner) and reaches the client.
+    # The circuit is per-account, so burner failures open the breaker for @topic too.
+    burner = @course.discussion_topics.create!(
+      title: "Burner topic for circuit test",
+      message: "Failure driver",
+      user: @teacher
+    )
+    burner.discussion_entries.create!(user: @teacher, message: "Burner entry")
+
+    threshold = DiscussionThreadSummarizer::CircuitBreaker::DEFAULT_FAILURE_THRESHOLD.to_i
+    allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_open)
+    allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize)
+      .and_raise(DiscussionThreadSummarizer::TransportError, "service down")
+
+    threshold.times do
+      DiscussionThreadSummarizer::SummarizationService.enqueue_for(
+        discussion_topic: burner,
+        viewer:           @teacher
+      )
+      run_jobs rescue nil
+    end
+
+    expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_circuit_open).at_least(:once)
+
+    # Track any post-open client calls — there must be none.
+    client_calls = 0
+    allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize) do
+      client_calls += 1
+      DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE
+    end
+
+    # GET for @topic must serve the cached row (status :current) despite the open circuit.
+    json = api_call(:get, render_path, render_params)
+    expect(response).to have_http_status(:ok)
+    expect(json["status"]).to eq("current")
+    expect(json["summary"]).not_to be_nil
+    expect(client_calls).to eq(0),
+      "model client must not be called when serving a cached row (got #{client_calls} call(s))"
+  end
+
+  # ── Example 4: no error envelope (inline unavailable status only) ─────────
   it "unavailable state carries no error envelope — inline status field only" do
     threshold = DiscussionThreadSummarizer::CircuitBreaker::DEFAULT_FAILURE_THRESHOLD.to_i
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_open)
-    threshold.times do
-      DiscussionThreadSummarizer::CircuitBreaker.record_failure(
-        account:    @course.root_account,
-        scope_mode: "default"
-      )
-    end
+    allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize)
+      .and_raise(DiscussionThreadSummarizer::TransportError, "service down")
+    threshold.times { drive_one_failure }
 
     json = api_call(:get, render_path, render_params)
     expect(response).to have_http_status(:ok)
