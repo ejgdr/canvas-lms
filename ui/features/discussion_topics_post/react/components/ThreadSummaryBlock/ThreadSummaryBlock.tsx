@@ -52,8 +52,7 @@ export const ThreadSummaryBlock = () => {
 
   const summaryText = formatThreadSummary(data.summary)
   const isGenerating = data.status === 'generating'
-  const isCooldown =
-    regeneration?.available === false && regeneration.reason === 'cooldown'
+  const isCooldown = regeneration?.available === false && regeneration.reason === 'cooldown'
   const cooldownSeconds = regeneration?.retry_after_seconds
   const showRegenerateButton = !isGenerating
 
@@ -155,9 +154,7 @@ export const ThreadSummaryBlock = () => {
                 hasShadow={false}
                 data-testid="thread-summary-stale-alert"
               >
-                {I18n.t(
-                  'This summary may be outdated because the discussion has new activity.',
-                )}
+                {I18n.t('This summary may be outdated because the discussion has new activity.')}
               </Alert>
             </Flex.Item>
             {renderSummaryText()}
@@ -189,12 +186,7 @@ export const ThreadSummaryBlock = () => {
   }
 
   return (
-    <View
-      as="div"
-      margin="0 0 medium 0"
-      padding="small"
-      data-testid="thread-summary-block"
-    >
+    <View as="div" margin="0 0 medium 0" padding="small" data-testid="thread-summary-block">
       <Flex direction="column">
         {quotaExhaustedMessage && (
           <Flex.Item margin="0 0 small 0">
@@ -220,9 +212,11 @@ export const ThreadSummaryBlock = () => {
           </Flex>
         </Flex.Item>
         {renderContent()}
-        <Flex.Item margin="small 0 0 0">
-          <SummaryReportForm />
-        </Flex.Item>
+        {(data.status === 'current' || data.status === 'stale') && (
+          <Flex.Item margin="small 0 0 0">
+            <SummaryReportForm />
+          </Flex.Item>
+        )}
       </Flex>
     </View>
   )

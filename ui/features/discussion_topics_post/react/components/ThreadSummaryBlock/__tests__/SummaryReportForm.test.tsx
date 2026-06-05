@@ -92,7 +92,10 @@ describe('SummaryReportForm', () => {
       http.post(reportPath, async ({request}) => {
         const body = (await request.json()) as {reason?: string; comment?: string}
         captured = body
-        return HttpResponse.json({id: 1, reason: body.reason, reporter_role: 'student'}, {status: 201})
+        return HttpResponse.json(
+          {id: 1, reason: body.reason, reporter_role: 'student'},
+          {status: 201},
+        )
       }),
     )
 
@@ -150,6 +153,23 @@ describe('SummaryReportForm', () => {
     })
   })
 
+  it('shows inline error when backend returns 422', async () => {
+    server.use(
+      http.post(reportPath, () =>
+        HttpResponse.json({errors: ['Reason is not included in the list']}, {status: 422}),
+      ),
+    )
+
+    const user = userEvent.setup()
+    const {getByTestId, findByTestId} = setup()
+
+    await user.click(getByTestId('thread-summary-report-button'))
+    await user.click(await findByTestId('thread-summary-report-reason-inaccurate'))
+    await user.click(getByTestId('thread-summary-report-submit'))
+
+    expect(await findByTestId('thread-summary-report-error')).toBeInTheDocument()
+  })
+
   it('disables submit and shows error when comment exceeds 500 characters', async () => {
     const user = userEvent.setup()
     const {getByTestId, findByTestId} = setup()
@@ -158,9 +178,8 @@ describe('SummaryReportForm', () => {
     await user.click(await findByTestId('thread-summary-report-reason-inaccurate'))
 
     const commentInput = await findByTestId('thread-summary-report-comment')
-    const longComment = 'a'.repeat(501)
-    await user.clear(commentInput)
-    await user.type(commentInput, longComment)
+    // Use fireEvent to set a long value instantly (userEvent.type is too slow for 501 chars)
+    fireEvent.change(commentInput, {target: {value: 'a'.repeat(501)}})
 
     const submitButton = getByTestId('thread-summary-report-submit')
     expect(submitButton).toHaveAttribute('disabled')

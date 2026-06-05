@@ -42,8 +42,7 @@ const sampleSummary = {
   scope_mode: 'default',
 }
 
-const threadSummaryPath =
-  '/api/v1/courses/1234/discussion_topics/5678/thread_summary'
+const threadSummaryPath = '/api/v1/courses/1234/discussion_topics/5678/thread_summary'
 
 const threadSummaryRegeneratePath = `${threadSummaryPath}/regenerate`
 
@@ -75,9 +74,7 @@ describe('ThreadSummaryBlock', () => {
     server.use(http.get(threadSummaryPath, () => HttpResponse.json(body)))
   }
 
-  const mockRegenerate = (
-    handler: () => ReturnType<typeof HttpResponse.json> | Response,
-  ) => {
+  const mockRegenerate = (handler: () => ReturnType<typeof HttpResponse.json> | Response) => {
     server.use(http.post(threadSummaryRegeneratePath, handler))
   }
 
@@ -352,6 +349,64 @@ describe('ThreadSummaryBlock', () => {
 
     await findByTestId('thread-summary-text')
     expect(queryByTestId('thread-summary-disclosure')).toBeNull()
+  })
+
+  it('shows the report button when status is current', async () => {
+    mockThreadSummary({
+      status: 'current',
+      enabled: true,
+      enqueued: false,
+      summary: sampleSummary,
+      record_id: 1,
+    })
+
+    const {findByTestId} = setup()
+
+    expect(await findByTestId('thread-summary-report-button')).toBeInTheDocument()
+  })
+
+  it('shows the report button when status is stale', async () => {
+    mockThreadSummary({
+      status: 'stale',
+      enabled: true,
+      enqueued: true,
+      summary: sampleSummary,
+      record_id: 1,
+    })
+
+    const {findByTestId} = setup()
+
+    expect(await findByTestId('thread-summary-report-button')).toBeInTheDocument()
+  })
+
+  it('does not show the report button when status is generating', async () => {
+    mockThreadSummary({
+      status: 'generating',
+      enabled: true,
+      enqueued: true,
+      summary: null,
+      record_id: null,
+    })
+
+    const {findByTestId, queryByTestId} = setup()
+
+    await findByTestId('thread-summary-generating')
+    expect(queryByTestId('thread-summary-report-button')).toBeNull()
+  })
+
+  it('does not show the report button when status is rate_limited_empty', async () => {
+    mockThreadSummary({
+      status: 'rate_limited_empty',
+      enabled: true,
+      enqueued: false,
+      summary: null,
+      record_id: null,
+    })
+
+    const {findByTestId, queryByTestId} = setup()
+
+    await findByTestId('thread-summary-rate-limited-empty')
+    expect(queryByTestId('thread-summary-report-button')).toBeNull()
   })
 
   it('shows inline quota-exhausted message instead of a toast', async () => {

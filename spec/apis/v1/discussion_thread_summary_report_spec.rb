@@ -134,7 +134,16 @@ RSpec.describe "Discussion thread summary report (M7 integration gate)", type: :
     @course.enable_feature!(:discussion_thread_summarizer)
   end
 
-  # ── Example 5: comment > 500 → 422 ───────────────────────────────────────
+  # ── Example 5a: invalid reason → 422 ────────────────────────────────────
+
+  it "returns 422 when reason is not a valid enum value" do
+    post_report(reason: "not_a_valid_reason")
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(DiscussionTopicSummaryReport.count).to eq(0)
+  end
+
+  # ── Example 5b: comment > 500 → 422 ──────────────────────────────────────
 
   it "returns 422 when comment exceeds 500 characters" do
     post_report(reason: "other", comment: "x" * 501)

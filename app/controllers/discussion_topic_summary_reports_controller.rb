@@ -27,6 +27,9 @@ class DiscussionTopicSummaryReportsController < ApplicationController
   PER_PAGE = 100
 
   def index
+    # Cross-account view: gate on site-admin flag scope (no single course context applies).
+    raise ActiveRecord::RecordNotFound unless Account.site_admin.feature_enabled?(:discussion_thread_summarizer)
+
     unless Account.site_admin.grants_right?(@current_user, :read)
       return render json: {errors: ["Unauthorized"]}, status: :forbidden
     end

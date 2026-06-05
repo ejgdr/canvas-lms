@@ -113,5 +113,22 @@ RSpec.describe DiscussionTopicSummaryReportsController, type: :controller do
         expect(json["errors"]).to include("Unauthorized")
       end
     end
+
+    context "when the summarizer flag is off at site-admin scope" do
+      before do
+        user_session(site_admin_user)
+        Account.site_admin.disable_feature!(:discussion_thread_summarizer)
+      end
+
+      after do
+        Account.site_admin.enable_feature!(:discussion_thread_summarizer)
+      end
+
+      it "returns 404" do
+        get :index, format: :json
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 end
