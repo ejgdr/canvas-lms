@@ -999,3 +999,12 @@ Report storage against a specific summary version. `DiscussionTopicSummaryReport
 | 35 | integration | [#132](https://github.com/ejgdr/canvas-lms/pull/132) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/apis/v1/discussion_thread_summary_report_spec.rb --format documentation` |
 
 M7 (Quality feedback loop) complete — #41/#44/#45 (Cycle 34), #42/#43 + integration gate (this cycle). Milestone closed.
+
+## M8
+
+Circuit breaker (P1 hardening) wraps `@client.summarize` in `SummarizationService`. `CircuitBreaker` is Redis-backed per account global_id; opens after N consecutive `TransportError` raises (Setting key `discussion_thread_summarizer_circuit_failure_threshold`, default 5); half-open after cooldown TTL expires on the open_key (Setting key `discussion_thread_summarizer_circuit_cooldown_seconds`, default 30 s). Emits `discussion_thread_summarizer.circuit_open` / `circuit_closed` on state transitions (frozen names for Cycle 37 #50 dashboard). `lookup_for_render` and `fetch_or_create_summary` short-circuit returning `:unavailable` when open — no row persisted, no client call. Outage spec (#49) drives the real GET route; asserts HTTP 200, `status: "unavailable"`, `generation_error` metric, and zero client calls when circuit is open.
+
+| Cycle | Issue | PR | Flag | QA | Reproduce |
+|---|---|---|---|---|---|
+| 36 | [#48](https://github.com/ejgdr/canvas-lms/issues/48) | [#133](https://github.com/ejgdr/canvas-lms/pull/133) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/circuit_breaker_spec.rb spec/apis/v1/discussion_thread_summarizer_outage_spec.rb` |
+| 36 | [#49](https://github.com/ejgdr/canvas-lms/issues/49) | [#133](https://github.com/ejgdr/canvas-lms/pull/133) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/apis/v1/discussion_thread_summarizer_outage_spec.rb` |
