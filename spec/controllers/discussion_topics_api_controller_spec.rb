@@ -1890,5 +1890,57 @@ describe DiscussionTopicsApiController do
       expect(response).to have_http_status :created
       expect(response.parsed_body).not_to have_key("user_id")
     end
+
+    it "returns JSON error body (not bare 404) when no matching summary exists" do
+      @summary.destroy
+      post_report(user: @student)
+      expect(response).to have_http_status :not_found
+      expect(response.parsed_body).to have_key("error")
+    end
+  end
+
+  context "report_thread_summary scope-limited mode (Discussion Thread Summarizer)" do
+    before do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @course.root_account.enable_feature!(:discussion_thread_summarizer_scope_limited)
+      @topic = @course.discussion_topics.create!(title: "discussion", user: @teacher)
+      @topic.discussion_entries.create!(user: @teacher, message: "hello")
+      # Summary keyed per-viewer for @student (limited mode)
+      student_hash = DiscussionThreadSummarizer::ContentVersionHash.call(
+        @topic, scope_mode: "limited", viewer: @student
+      )
+      @summary = @topic.summaries.create!(
+        user: @teacher,
+        locale: "en",
+        summary: "Limited summary",
+        dynamic_content_hash: student_hash,
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+      )
+      allow(InstStatsd::Statsd).to receive(:distributed_increment).and_return(nil)
+    end
+
+    it "attaches report to the viewer's per-viewer summary row" do
+      user_session(@student)
+      post "report_thread_summary",
+           params: { course_id: @course.id, topic_id: @topic.id,
+                     user_id: @student.id, reason: "inaccurate" },
+           format: "json"
+      expect(response).to have_http_status :created
+      report = DiscussionTopicSummaryReport.last
+      expect(report.discussion_topic_summary_id).to eq(@summary.id)
+    end
+
+    it "returns 404 for a viewer whose per-viewer summary row does not exist" do
+      # @teacher has no summary row keyed to their viewer hash
+      user_session(@teacher)
+      post "report_thread_summary",
+           params: { course_id: @course.id, topic_id: @topic.id,
+                     user_id: @teacher.id, reason: "inaccurate" },
+           format: "json"
+      expect(response).to have_http_status :not_found
+      expect(response.parsed_body).to have_key("error")
+    end
   end
 end

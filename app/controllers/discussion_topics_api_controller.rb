@@ -276,8 +276,8 @@ class DiscussionTopicsApiController < ApplicationController
   def report_thread_summary
     raise ActiveRecord::RecordNotFound unless @context.is_a?(Course) && @context.feature_enabled?(:discussion_thread_summarizer)
 
-    account     = @context.root_account
-    scope_mode  = account.feature_enabled?(:discussion_thread_summarizer_scope_limited) ? "limited" : "default"
+    account      = @context.root_account
+    scope_mode   = discussion_thread_summarizer_scope_mode(@context)
     content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic, scope_mode:, viewer: @current_user)
     locale       = I18n.locale.to_s
 
