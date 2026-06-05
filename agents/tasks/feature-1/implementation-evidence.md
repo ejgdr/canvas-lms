@@ -991,6 +991,6 @@ Report storage against a specific summary version. `DiscussionTopicSummaryReport
 
 | Cycle | Issue | PR | Flag | QA | Reproduce |
 |---|---|---|---|---|---|
-| 34 | [#41](https://github.com/ejgdr/canvas-lms/issues/41) | #PR | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/models/discussion_topic_summary_report_spec.rb --format documentation` |
-| 34 | [#44](https://github.com/ejgdr/canvas-lms/issues/44) | #PR | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/models/discussion_topic_summary_report_spec.rb --format documentation` |
-| 34 | [#45](https://github.com/ejgdr/canvas-lms/issues/45) | #PR | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
+| 34 | [#41](https://github.com/ejgdr/canvas-lms/issues/41) | [#131](https://github.com/ejgdr/canvas-lms/pull/131) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/models/discussion_topic_summary_report_spec.rb --format documentation` |
+| 34 | [#44](https://github.com/ejgdr/canvas-lms/issues/44) | [#131](https://github.com/ejgdr/canvas-lms/pull/131) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/models/discussion_topic_summary_report_spec.rb --format documentation` |
+| 34 | [#45](https://github.com/ejgdr/canvas-lms/issues/45) | [#131](https://github.com/ejgdr/canvas-lms/pull/131) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
