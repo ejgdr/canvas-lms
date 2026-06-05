@@ -276,10 +276,21 @@ class DiscussionTopicsApiController < ApplicationController
   def report_thread_summary
     raise ActiveRecord::RecordNotFound unless @context.is_a?(Course) && @context.feature_enabled?(:discussion_thread_summarizer)
 
-    summary = DiscussionTopicSummary
-              .where(discussion_topic: @topic, parent_id: nil, locale: I18n.locale.to_s)
-              .order(created_at: :desc)
-              .first
+    account     = @context.root_account
+    scope_mode  = account.feature_enabled?(:discussion_thread_summarizer_scope_limited) ? "limited" : "default"
+    content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic, scope_mode:, viewer: @current_user)
+    locale       = I18n.locale.to_s
+
+    # Find the exact summary version this viewer was shown (M6: per-viewer hash in limited mode).
+    summary = @topic.summaries
+                    .where(
+                      llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION,
+                      dynamic_content_hash: content_hash,
+                      parent_id: nil,
+                      locale:
+                    )
+                    .order(created_at: :desc)
+                    .first
 
     return render(json: { error: t("No summary found.") }, status: :not_found) unless summary
 
@@ -293,7 +304,8 @@ class DiscussionTopicsApiController < ApplicationController
     if report.save
       DiscussionThreadSummarizer::Metrics.increment_report_submitted(
         reason: report.reason,
-        reporter_role: report.reporter_role
+        reporter_role: report.reporter_role,
+        account:
       )
       render(json: report_thread_summary_json(report), status: :created)
     else
@@ -1589,7 +1601,10 @@ class DiscussionTopicsApiController < ApplicationController
   end
 
   def reporter_role_for_current_user
-    if @context.grants_right?(@current_user, session, :read_as_admin)
+    # Check read_as_admin at account scope, not course scope.
+    # Course teachers hold :read_as_admin on the course itself; account admins hold
+    # it on the account. Checking @context.account isolates account-level admins.
+    if @context.account.grants_right?(@current_user, session, :read_as_admin)
       "admin"
     elsif @context.grants_right?(@current_user, session, :moderate_forum)
       "teacher"

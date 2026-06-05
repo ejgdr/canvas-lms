@@ -149,4 +149,18 @@ describe DiscussionThreadSummarizer::Metrics do
       )
     end
   end
+
+  describe ".increment_report_submitted" do
+    it "emits discussion_thread_summarizer.report_submitted with reason, reporter_role, and account_id tags" do
+      described_class.increment_report_submitted(
+        reason: "inaccurate",
+        reporter_role: "teacher",
+        account:
+      )
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.report_submitted",
+        tags: { reason: "inaccurate", reporter_role: "teacher", account_id: 10_000_000_000_001 }
+      )
+    end
+  end
 end

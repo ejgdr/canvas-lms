@@ -116,28 +116,33 @@ describe DiscussionTopicSummaryReport do
 
   # ── metric emission ────────────────────────────────────────────────────────
 
-  it "emits report_submitted metric with reason and reporter_role tags" do
+  it "emits report_submitted metric with reason, reporter_role, and account_id tags" do
+    account = instance_double("Account", global_id: 10_000_000_000_001)
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_report_submitted)
     report.save!
     DiscussionThreadSummarizer::Metrics.increment_report_submitted(
       reason: report.reason,
-      reporter_role: report.reporter_role
+      reporter_role: report.reporter_role,
+      account:
     )
     expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_report_submitted).with(
       reason: "inaccurate",
-      reporter_role: "student"
+      reporter_role: "student",
+      account:
     )
   end
 
-  it "emits metric with no user_id in tags" do
+  it "emits metric with account_id tag and no user_id or report text" do
+    account = instance_double("Account", global_id: 10_000_000_000_001)
     allow(InstStatsd::Statsd).to receive(:distributed_increment)
     DiscussionThreadSummarizer::Metrics.increment_report_submitted(
       reason: "other",
-      reporter_role: "teacher"
+      reporter_role: "teacher",
+      account:
     )
     expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
       "discussion_thread_summarizer.report_submitted",
-      tags: { reason: "other", reporter_role: "teacher" }
+      tags: { reason: "other", reporter_role: "teacher", account_id: 10_000_000_000_001 }
     )
   end
 end

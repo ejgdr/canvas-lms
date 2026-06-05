@@ -1826,4 +1826,69 @@ describe DiscussionTopicsApiController do
       )
     end
   end
+
+  context "report_thread_summary (Discussion Thread Summarizer)" do
+    before do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true, course: @course)
+      @course.enable_feature!(:discussion_thread_summarizer)
+      @topic = @course.discussion_topics.create!(title: "discussion", user: @teacher)
+      @topic.discussion_entries.create!(user: @teacher, message: "hello")
+      content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic)
+      @summary = @topic.summaries.create!(
+        user: @teacher,
+        locale: "en",
+        summary: "Test summary",
+        dynamic_content_hash: content_hash,
+        llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION
+      )
+      allow(InstStatsd::Statsd).to receive(:distributed_increment).and_return(nil)
+    end
+
+    def post_report(user:, reason: "inaccurate", comment: nil)
+      user_session(user)
+      params = { course_id: @course.id, topic_id: @topic.id, user_id: user.id, reason: }
+      params[:comment] = comment if comment
+      post "report_thread_summary", params:, format: "json"
+    end
+
+    it "returns 404 when the feature flag is off" do
+      @course.disable_feature!(:discussion_thread_summarizer)
+      post_report(user: @student)
+      expect(response).to have_http_status :not_found
+    end
+
+    it "assigns reporter_role student for a student" do
+      post_report(user: @student)
+      expect(response).to have_http_status :created
+      report = DiscussionTopicSummaryReport.last
+      expect(report.reporter_role).to eq("student")
+    end
+
+    it "assigns reporter_role teacher for a course teacher" do
+      post_report(user: @teacher)
+      expect(response).to have_http_status :created
+      report = DiscussionTopicSummaryReport.last
+      expect(report.reporter_role).to eq("teacher")
+    end
+
+    it "assigns reporter_role admin for an account admin" do
+      @admin = account_admin_user(account: @course.root_account)
+      post_report(user: @admin)
+      expect(response).to have_http_status :created
+      report = DiscussionTopicSummaryReport.last
+      expect(report.reporter_role).to eq("admin")
+    end
+
+    it "returns 422 when comment exceeds 500 characters" do
+      post_report(user: @student, comment: "a" * 501)
+      expect(response).to have_http_status :unprocessable_entity
+    end
+
+    it "response JSON does not include user_id" do
+      post_report(user: @student)
+      expect(response).to have_http_status :created
+      expect(response.parsed_body).not_to have_key("user_id")
+    end
+  end
 end
