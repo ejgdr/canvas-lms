@@ -36,6 +36,7 @@ module DiscussionThreadSummarizer
       rate_limited_stale
       rate_limited_empty
       disabled
+      unavailable
     ].freeze
 
     RenderResult = Struct.new(:status, :record, :result, :enqueued, keyword_init: true)
@@ -110,6 +111,11 @@ module DiscussionThreadSummarizer
       end
 
       DiscussionThreadSummarizer::Metrics.increment_rate_limit_allowed(account:)
+
+      if Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
+        return CacheResult.new(status: :unavailable, record: nil, result: nil)
+      end
+
       DiscussionThreadSummarizer::Metrics.increment_generation_attempt(account:, scope_mode:)
       result = summarize(discussion_topic:, viewer:)
       record = persist_summary_record(
@@ -166,6 +172,11 @@ module DiscussionThreadSummarizer
 
       account      = discussion_topic.context.root_account
       scope_mode   = scope_mode_for(discussion_topic)
+
+      if Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
+        return RenderResult.new(status: :unavailable, record: nil, result: nil, enqueued: false)
+      end
+
       record       = find_latest_summary_row(discussion_topic, locale)
       current_hash = ContentVersionHash.call(discussion_topic, scope_mode:, viewer:)
 
@@ -207,7 +218,14 @@ module DiscussionThreadSummarizer
       payload = pseudonymize(payload)
       t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-      result = @client.summarize(payload)
+      begin
+        result = @client.summarize(payload)
+      rescue DiscussionThreadSummarizer::TransportError
+        CircuitBreaker.record_failure(account:, scope_mode:) if Canvas.redis_enabled?
+        raise
+      end
+      CircuitBreaker.record_success(account:, scope_mode:) if Canvas.redis_enabled?
+
       begin
         validate(result)
       rescue DiscussionThreadSummarizer::SchemaViolationError
