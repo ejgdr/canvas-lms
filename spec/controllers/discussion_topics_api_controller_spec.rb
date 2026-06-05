@@ -1885,6 +1885,15 @@ describe DiscussionTopicsApiController do
       expect(response).to have_http_status :unprocessable_entity
     end
 
+    it "returns 422 when reason is invalid" do
+      user_session(@student)
+      post "report_thread_summary",
+           params: { course_id: @course.id, topic_id: @topic.id,
+                     user_id: @student.id, reason: "garbage" },
+           format: "json"
+      expect(response).to have_http_status :unprocessable_entity
+    end
+
     it "response JSON does not include user_id" do
       post_report(user: @student)
       expect(response).to have_http_status :created
