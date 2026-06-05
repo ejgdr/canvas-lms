@@ -28,6 +28,7 @@ import {View} from '@instructure/ui-view'
 import {formatRegenerationCooldownLabel} from './formatRegenerationCooldown'
 import {formatThreadSummary} from './formatThreadSummary'
 import {useThreadSummary} from './useThreadSummary'
+import {SummaryReportForm} from './SummaryReportForm'
 
 const I18n = createI18nScope('discussion_topics_post')
 
@@ -219,6 +220,9 @@ export const ThreadSummaryBlock = () => {
           </Flex>
         </Flex.Item>
         {renderContent()}
+        <Flex.Item margin="small 0 0 0">
+          <SummaryReportForm />
+        </Flex.Item>
       </Flex>
     </View>
   )
