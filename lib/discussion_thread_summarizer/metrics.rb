@@ -200,5 +200,16 @@ module DiscussionThreadSummarizer
         tags: { account_id: account.global_id, reason_category:, reporter_role: }
       )
     end
+
+    # Emitted on each successful DiscussionTopicSummaryReport creation (#41/#45).
+    # reason:        one of "inaccurate", "missed_viewpoint", "harmful_content", "other"
+    # reporter_role: "student", "teacher", or "admin" — no user_id or report text in tags.
+    # account_id:    global_id for per-account aggregation (consistent with other metrics).
+    def self.increment_report_submitted(reason:, reporter_role:, account:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.report_submitted",
+        tags: { reason:, reporter_role:, account_id: account.global_id }
+      )
+    end
   end
 end

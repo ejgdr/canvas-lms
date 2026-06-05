@@ -255,6 +255,64 @@ class DiscussionTopicsApiController < ApplicationController
     end
   end
 
+  # @API Report thread summary (Discussion Thread Summarizer)
+  #
+  # Submits an inaccuracy or quality report against the current thread summary.
+  # Any viewer who can see the summary may report it.
+  # Does not invalidate the cache or trigger regeneration.
+  #
+  # @argument reason [Required, String, "inaccurate"|"missed_viewpoint"|"harmful_content"|"other"]
+  #   Category of the report.
+  #
+  # @argument comment [String]
+  #   Optional free-text elaboration (max 500 characters).
+  #
+  # @example_request
+  #
+  #     curl https://<canvas>/api/v1/courses/<course_id>/discussion_topics/<topic_id>/thread_summary/report \
+  #         -X POST \
+  #         -H 'Authorization: Bearer <token>' \
+  #         -d 'reason=inaccurate&comment=Details+here'
+  def report_thread_summary
+    raise ActiveRecord::RecordNotFound unless @context.is_a?(Course) && @context.feature_enabled?(:discussion_thread_summarizer)
+
+    account      = @context.root_account
+    scope_mode   = discussion_thread_summarizer_scope_mode(@context)
+    content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(@topic, scope_mode:, viewer: @current_user)
+    locale       = I18n.locale.to_s
+
+    # Find the exact summary version this viewer was shown (M6: per-viewer hash in limited mode).
+    summary = @topic.summaries
+                    .where(
+                      llm_config_version: DiscussionThreadSummarizer::SummarizationService::LLM_CONFIG_VERSION,
+                      dynamic_content_hash: content_hash,
+                      parent_id: nil,
+                      locale:
+                    )
+                    .order(created_at: :desc)
+                    .first
+
+    return render(json: { error: t("No summary found.") }, status: :not_found) unless summary
+
+    report = summary.reports.build(
+      user: @current_user,
+      reason: params[:reason],
+      comment: params[:comment].presence,
+      reporter_role: reporter_role_for_current_user
+    )
+
+    if report.save
+      DiscussionThreadSummarizer::Metrics.increment_report_submitted(
+        reason: report.reason,
+        reporter_role: report.reporter_role,
+        account:
+      )
+      render(json: report_thread_summary_json(report), status: :created)
+    else
+      render(json: { errors: report.errors.full_messages }, status: :unprocessable_entity)
+    end
+  end
+
   # @API Find or Create Summary
   #
   # Generates a summary for a discussion topic. Returns the summary text and usage information.
@@ -1529,6 +1587,29 @@ class DiscussionTopicsApiController < ApplicationController
       }
     when :quota_denied
       { available: false, reason: "quota_exhausted" }
+    end
+  end
+
+  def report_thread_summary_json(report)
+    {
+      id: report.id,
+      reason: report.reason,
+      comment: report.comment,
+      reporter_role: report.reporter_role,
+      created_at: report.created_at
+    }
+  end
+
+  def reporter_role_for_current_user
+    # Check read_as_admin at account scope, not course scope.
+    # Course teachers hold :read_as_admin on the course itself; account admins hold
+    # it on the account. Checking @context.account isolates account-level admins.
+    if @context.account.grants_right?(@current_user, session, :read_as_admin)
+      "admin"
+    elsif @context.grants_right?(@current_user, session, :moderate_forum)
+      "teacher"
+    else
+      "student"
     end
   end
 
