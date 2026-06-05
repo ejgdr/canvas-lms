@@ -36,3 +36,7 @@ export function buildThreadSummaryPath(locale: string): string {
 export function buildThreadSummaryRegeneratePath(): string {
   return `${threadSummaryBasePath()}/regenerate`
 }
+
+export function buildThreadSummaryReportPath(): string {
+  return `${threadSummaryBasePath()}/report`
+}
