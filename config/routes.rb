@@ -1643,6 +1643,7 @@ CanvasRails::Application.routes.draw do
         post "#{context.pluralize}/:#{context}_id/discussion_questions/:id/dismiss", action: :dismiss_question, as: "#{context}_discussion_question_dismiss"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary", action: :thread_summary, as: "#{context}_discussion_topic_thread_summary"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary/regenerate", action: :regenerate_thread_summary, as: "#{context}_discussion_topic_thread_summary_regenerate"
+        post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/thread_summary/report", action: :report_thread_summary, as: "#{context}_discussion_topic_thread_summary_report"
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_summary, as: "#{context}_discussion_topic_summary"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_or_create_summary, as: "#{context}_discussion_topic_create_summary"
         put "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries/disable", action: :disable_summary, as: "#{context}_discussion_topic_disable_summary"

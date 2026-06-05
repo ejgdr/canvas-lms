@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Copyright (C) 2024 - present Instructure, Inc.
+# Copyright (C) 2026 - present Instructure, Inc.
 #
 # This file is part of Canvas.
 #
@@ -16,22 +16,17 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-class DiscussionTopicSummary < ApplicationRecord
-  belongs_to :root_account, class_name: "Account"
+# Append-only report of an inaccuracy or quality issue against a specific
+# DiscussionTopicSummary version. user_id is stored for abuse-prevention purposes
+# and must never be serialized in API responses or admin output.
+class DiscussionTopicSummaryReport < ApplicationRecord
+  belongs_to :discussion_topic_summary
   belongs_to :user
-  belongs_to :discussion_topic, inverse_of: :summaries
-  belongs_to :parent, class_name: "DiscussionTopicSummary", optional: true
 
-  has_many :feedback, class_name: "DiscussionTopicSummary::Feedback"
-  has_many :reports, class_name: "DiscussionTopicSummaryReport"
+  REASONS = %w[inaccurate missed_viewpoint harmful_content other].freeze
+  REPORTER_ROLES = %w[student teacher admin].freeze
 
-  validates :summary, presence: true
-  validates :llm_config_version, presence: true
-  validates :dynamic_content_hash, presence: true
-
-  before_validation :set_root_account
-
-  def set_root_account
-    self.root_account ||= discussion_topic.root_account
-  end
+  validates :reason, inclusion: { in: REASONS }
+  validates :comment, length: { maximum: 500 }, allow_nil: true
+  validates :reporter_role, inclusion: { in: REPORTER_ROLES }
 end

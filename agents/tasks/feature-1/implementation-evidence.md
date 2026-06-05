@@ -984,3 +984,13 @@ Scope-limited mode end-to-end: per-viewer ContentVersionHash (viewer.id folded i
 | 33 | [#38](https://github.com/ejgdr/canvas-lms/issues/38) | [#130](https://github.com/ejgdr/canvas-lms/pull/130) | none (docs-only) | Skip — justified | n/a |
 
 M6 (Privacy controls) complete — #35/#39 (Cycle 31), #36/#37 (Cycle 32), #40/#38 (this cycle). Milestone closed.
+
+## M7
+
+Report storage against a specific summary version. `DiscussionTopicSummaryReport` (`belongs_to :discussion_topic_summary`) stores `reason`, `comment` (max 500 chars), `reporter_role` (derived from `grants_right?`), and `user_id` (never serialized). Route mirrors `regenerate`. Metric `discussion_thread_summarizer.report_submitted` tagged `reason` + `reporter_role` — no PII.
+
+| Cycle | Issue | PR | Flag | QA | Reproduce |
+|---|---|---|---|---|---|
+| 34 | [#41](https://github.com/ejgdr/canvas-lms/issues/41) | #PR | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/models/discussion_topic_summary_report_spec.rb --format documentation` |
+| 34 | [#44](https://github.com/ejgdr/canvas-lms/issues/44) | #PR | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/models/discussion_topic_summary_report_spec.rb --format documentation` |
+| 34 | [#45](https://github.com/ejgdr/canvas-lms/issues/45) | #PR | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb --format documentation` |
