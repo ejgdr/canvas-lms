@@ -1030,8 +1030,8 @@ Swappable provider interface via env-var-driven `ModelClientFactory`. `SelfHoste
 
 | Cycle | Issue | PR | Flag | QA | Reproduce(rspec cmd) |
 |---|---|---|---|---|---|
-| 38 | [#51](https://github.com/ejgdr/canvas-lms/issues/51) | pending | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/model_client_spec.rb spec/services/discussion_thread_summarizer/self_hosted_model_client_spec.rb spec/services/discussion_thread_summarizer/model_client_factory_spec.rb` |
-| 38 | [#52](https://github.com/ejgdr/canvas-lms/issues/52) | pending | `discussion_thread_summarizer` | Pass | (docs + adapter; same spec run as #51) |
-| 38 | [#53](https://github.com/ejgdr/canvas-lms/issues/53) | pending | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/conformance_spec.rb` |
+| 38 | [#51](https://github.com/ejgdr/canvas-lms/issues/51) | [#135](https://github.com/ejgdr/canvas-lms/pull/135) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/model_client_spec.rb spec/services/discussion_thread_summarizer/self_hosted_model_client_spec.rb spec/services/discussion_thread_summarizer/model_client_factory_spec.rb` |
+| 38 | [#52](https://github.com/ejgdr/canvas-lms/issues/52) | [#135](https://github.com/ejgdr/canvas-lms/pull/135) | `discussion_thread_summarizer` | Pass | (docs + adapter; same spec run as #51) |
+| 38 | [#53](https://github.com/ejgdr/canvas-lms/issues/53) | [#135](https://github.com/ejgdr/canvas-lms/pull/135) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/conformance_spec.rb` |
 
 M9 (Stretch — institutional self-hosted model option) complete — #51/#52/#53 (Cycle 38). Milestone closed. Summarizer feature complete.
