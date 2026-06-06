@@ -44,5 +44,11 @@ module DiscussionThreadSummarizer
     def summarize(payload)
       raise NotImplementedError, "#{self.class}#summarize must be implemented"
     end
+
+    # Returns a loggable identifier for this adapter — never a raw URL or credential.
+    # Concrete clients may override to return a more descriptive string.
+    def model_identifier
+      self.class.name
+    end
   end
 end
