@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "webmock/rspec"
+
 # Thin service-level invariant: SummarizationService#summarize emits exactly
 # one audit log record per call regardless of outcome. Router-level gate
 # assertions (flag off, TransportError, PII, scope_mode) live in the API
@@ -64,5 +66,45 @@ describe "DiscussionThreadSummarizer audit log one-record-per-attempt invariant"
 
     expect(audit_entries.size).to eq(1)
     expect(JSON.parse(audit_entries.first, symbolize_names: true)[:success]).to be(false)
+  end
+
+  # ── M9 (#53 AC): audit log records correct model_identifier per adapter ───
+
+  context "adapter-specific model_identifier in audit log" do
+    let(:stub_endpoint) { "http://localhost:11434/summarize" }
+    let(:self_hosted_response) { DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE }
+
+    before do
+      allow(ENV).to receive(:[]).and_call_original
+      allow(ENV).to receive(:fetch).and_call_original
+      stub_request(:post, stub_endpoint)
+        .to_return(
+          status: 200,
+          body: self_hosted_response.to_json,
+          headers: { "Content-Type" => "application/json" }
+        )
+    end
+
+    it "third-party adapter (StubModelClient) emits class name as model_identifier" do
+      DiscussionThreadSummarizer::SummarizationService.new(
+        client: DiscussionThreadSummarizer::StubModelClient.new
+      ).summarize(discussion_topic: topic, viewer: teacher)
+
+      record = JSON.parse(audit_entries.first)
+      expect(record["model_identifier"]).to eq("DiscussionThreadSummarizer::StubModelClient")
+    end
+
+    it "self-hosted adapter emits endpoint identifier (not class name) as model_identifier" do
+      allow(ENV).to receive(:[]).with("SUMMARIZER_ENDPOINT_URL").and_return(stub_endpoint)
+      allow(ENV).to receive(:[]).with("SUMMARIZER_ENDPOINT_TOKEN").and_return(nil)
+      allow(ENV).to receive(:fetch).with("SUMMARIZER_ENDPOINT_URL", "").and_return(stub_endpoint)
+
+      DiscussionThreadSummarizer::SummarizationService.new(
+        client: DiscussionThreadSummarizer::SelfHostedModelClient.new
+      ).summarize(discussion_topic: topic, viewer: teacher)
+
+      record = JSON.parse(audit_entries.first)
+      expect(record["model_identifier"]).to eq("self-hosted:localhost/summarize")
+    end
   end
 end

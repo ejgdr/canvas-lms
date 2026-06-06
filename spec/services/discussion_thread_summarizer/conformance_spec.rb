@@ -181,7 +181,7 @@ RSpec.describe "DiscussionThreadSummarizer adapter conformance" do
       end
     end
 
-    it "audit log emits correct model_identifier for each adapter" do
+    it "#model_identifier returns the correct identifier string for each adapter" do
       aggregate_failures do
         expect(third_party.model_identifier).to eq("DiscussionThreadSummarizer::StubModelClient")
         expect(self_hosted.model_identifier).to eq("self-hosted:localhost/summarize")
