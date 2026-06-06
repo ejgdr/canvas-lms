@@ -44,7 +44,8 @@ module DiscussionThreadSummarizer
   # .state(account:)             → :open | :half_open | :closed  (pure read, no writes)
   # .try_acquire_probe(account:) → true for the one winner, false for all others.
   # .record_success(account:, …) — resets counter, closes circuit, emits metric.
-  # .record_failure(account:, …) — increments counter; opens when threshold hit.
+  # .record_failure(account:, …) — closed: counts to threshold then opens.
+  #                                open/half-open: re-opens immediately (failed probe).
   class CircuitBreaker
     FAILURE_THRESHOLD_SETTING_KEY = "discussion_thread_summarizer_circuit_failure_threshold"
     DEFAULT_FAILURE_THRESHOLD     = "5"
@@ -78,6 +79,13 @@ module DiscussionThreadSummarizer
     def self.record_failure(account:, scope_mode:)
       raise DiscussionThreadSummarizer::RegenerationRateLimiter::REDIS_REQUIRED_MESSAGE \
         unless Canvas.redis_enabled?
+
+      # A failure while the circuit is open or half-open is a failed probe.
+      # Re-open immediately with a fresh cooldown; do not count toward threshold.
+      if Canvas.redis.get(open_key(account)).present?
+        open!(account:, scope_mode:)
+        return
+      end
 
       threshold = Setting.get(FAILURE_THRESHOLD_SETTING_KEY, DEFAULT_FAILURE_THRESHOLD).to_i
       count     = Canvas.redis.incr(failure_key(account)).to_i

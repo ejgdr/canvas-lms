@@ -306,6 +306,29 @@ RSpec.describe "Discussion thread summarizer outage path (M8 gate, #49)", type: 
       expect(result.status).to eq(:unavailable)
       expect(client_calls).to eq(0), "loser must not call the client — probe already held"
     end
+
+    it "failed probe re-opens the circuit; subsequent render returns :unavailable" do
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_open)
+      allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize)
+        .and_raise(DiscussionThreadSummarizer::TransportError, "still down")
+
+      # Drive one probe attempt that fails — circuit must re-open.
+      DiscussionThreadSummarizer::SummarizationService.enqueue_for(
+        discussion_topic: @topic,
+        viewer: @teacher
+      )
+      run_jobs rescue nil
+
+      expect(DiscussionThreadSummarizer::CircuitBreaker.state(account:)).to eq(:open),
+        "failed half-open probe must re-open the circuit"
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_circuit_open)
+        .at_least(:once)
+
+      # Subsequent render with no cached row must return :unavailable, not :generating.
+      json = api_call(:get, render_path, render_params)
+      expect(response).to have_http_status(:ok)
+      expect(json["status"]).to eq("unavailable")
+    end
   end
 
   # ── Example 4: no error envelope (inline unavailable status only) ─────────

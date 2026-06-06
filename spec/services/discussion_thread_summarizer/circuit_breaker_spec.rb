@@ -83,6 +83,7 @@ describe DiscussionThreadSummarizer::CircuitBreaker do
 
   describe ".record_failure" do
     before do
+      allow(fake_redis).to receive(:get).and_return(nil)  # open_key absent → closed path
       allow(fake_redis).to receive(:incr).and_return(1)
       allow(fake_redis).to receive(:expire)
       allow(fake_redis).to receive(:set)
@@ -130,6 +131,16 @@ describe DiscussionThreadSummarizer::CircuitBreaker do
       allow(fake_redis).to receive(:incr).and_return(threshold)
       described_class.record_failure(account:, scope_mode:)
       expect(fake_redis).to have_received(:del).with(a_string_including("failures"))
+    end
+
+    it "re-opens immediately (no threshold wait) when open_key is present (failed half-open probe)" do
+      allow(fake_redis).to receive(:get).and_return("1")  # open_key present
+      described_class.record_failure(account:, scope_mode:)
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_circuit_open).with(
+        account:,
+        scope_mode:
+      )
+      expect(fake_redis).not_to have_received(:incr)
     end
   end
 
