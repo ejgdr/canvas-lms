@@ -1023,3 +1023,15 @@ Circuit breaker (P1 hardening) wraps `@client.summarize` in `SummarizationServic
 | cache hit rate (repeated-read soak) | ≥80% when hash stable | ✅ (by design: same hash → same hit) |
 
 M8 (Hardening) complete — #48/#49 (Cycle 36), #46/#47/#50 (Cycle 37). Milestone closed.
+
+## M9
+
+Swappable provider interface via env-var-driven `ModelClientFactory`. `SelfHostedModelClient` POSTs to `SUMMARIZER_ENDPOINT_URL` via `Net::HTTP` (bypasses CanvasHttp SSRF guards — operator-configured, not user-supplied). `model_identifier` returns `"self-hosted:<host><path>"` in audit logs. Conformance suite sends same fixtures to both adapters; both pass `OutputSchemaValidator`; shape extensions are warnings not failures. Spike outcome A confirmed (see `agents/tasks/feature-1/m9_spike_report.md`).
+
+| Cycle | Issue | PR | Flag | QA | Reproduce(rspec cmd) |
+|---|---|---|---|---|---|
+| 38 | [#51](https://github.com/ejgdr/canvas-lms/issues/51) | pending | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/model_client_spec.rb spec/services/discussion_thread_summarizer/self_hosted_model_client_spec.rb spec/services/discussion_thread_summarizer/model_client_factory_spec.rb` |
+| 38 | [#52](https://github.com/ejgdr/canvas-lms/issues/52) | pending | `discussion_thread_summarizer` | Pass | (docs + adapter; same spec run as #51) |
+| 38 | [#53](https://github.com/ejgdr/canvas-lms/issues/53) | pending | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/conformance_spec.rb` |
+
+M9 (Stretch — institutional self-hosted model option) complete — #51/#52/#53 (Cycle 38). Milestone closed. Summarizer feature complete.

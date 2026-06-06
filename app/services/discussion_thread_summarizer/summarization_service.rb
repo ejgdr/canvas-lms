@@ -46,7 +46,7 @@ module DiscussionThreadSummarizer
     # Mirrors the insight_generation pattern in DiscussionTopicsApiController.
     # Singleton + n_strand ensure at most one job per topic runs at a time.
     def self.enqueue_for(discussion_topic:, viewer:)
-      new.delay(
+      new(client: ModelClientFactory.build).delay(
         priority: Delayed::HIGH_PRIORITY,
         singleton: "discussion_thread_summarizer:generation_for_topic:#{discussion_topic.id}",
         n_strand: ["discussion_thread_summarizer:generation:#{Shard.current.database_server.region}", 1]
@@ -279,7 +279,7 @@ module DiscussionThreadSummarizer
         emit_audit_log(
           thread_id:         discussion_topic.id,
           scope_mode:        payload[:scope_mode],
-          model_identifier:  @client.class.name,
+          model_identifier:  @client.model_identifier,
           request_byte_size: payload.to_json.bytesize,
           latency_ms:        ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round,
           success:           propagating.nil?,
