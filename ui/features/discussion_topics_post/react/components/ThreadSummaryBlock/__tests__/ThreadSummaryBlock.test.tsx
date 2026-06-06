@@ -409,6 +409,104 @@ describe('ThreadSummaryBlock', () => {
     expect(queryByTestId('thread-summary-report-button')).toBeNull()
   })
 
+  // #46 a11y assertions — each would fail if the label/aria is removed
+  describe('accessibility (WCAG 2.1 AA)', () => {
+    it('stale state renders a distinct text label (not just a color indicator)', async () => {
+      mockThreadSummary({
+        status: 'stale',
+        enabled: true,
+        enqueued: true,
+        summary: sampleSummary,
+        record_id: 1,
+      })
+
+      const {findByTestId} = setup()
+
+      const alert = await findByTestId('thread-summary-stale-alert')
+      expect(alert.textContent).toContain('may be outdated')
+    })
+
+    it('generating state renders a visible text label', async () => {
+      mockThreadSummary({
+        status: 'generating',
+        enabled: true,
+        enqueued: true,
+        summary: null,
+        record_id: null,
+      })
+
+      const {findByTestId} = setup()
+
+      const generating = await findByTestId('thread-summary-generating')
+      expect(generating.textContent).toContain('Generating thread summary')
+    })
+
+    it('unavailable state renders a text label with role=status and aria-live=polite', async () => {
+      mockThreadSummary({
+        status: 'unavailable',
+        enabled: true,
+        enqueued: false,
+        summary: null,
+        record_id: null,
+      } as any)
+
+      const {findByTestId} = setup()
+
+      const el = await findByTestId('thread-summary-unavailable')
+      expect(el.textContent).toContain('unavailable')
+      // Must be a live region so transitions from generating → unavailable are announced
+      expect(el).toHaveAttribute('role', 'status')
+      expect(el).toHaveAttribute('aria-live', 'polite')
+    })
+
+    it('rate_limited_empty state renders a visible text label', async () => {
+      mockThreadSummary({
+        status: 'rate_limited_empty',
+        enabled: true,
+        enqueued: false,
+        summary: null,
+        record_id: null,
+      })
+
+      const {findByTestId} = setup()
+
+      const el = await findByTestId('thread-summary-rate-limited-empty')
+      expect(el.textContent).toContain('unavailable')
+    })
+
+    it('regenerate button has an accessible name via aria-label', async () => {
+      mockThreadSummary({
+        status: 'current',
+        enabled: true,
+        enqueued: false,
+        summary: sampleSummary,
+        record_id: 1,
+        regeneration: {available: true},
+      })
+
+      const {findByTestId} = setup()
+
+      const button = await findByTestId('thread-summary-regenerate-button')
+      expect(button).toHaveAttribute('aria-label', 'Regenerate summary')
+    })
+
+    it('generating state container has role=status and aria-live=polite', async () => {
+      mockThreadSummary({
+        status: 'generating',
+        enabled: true,
+        enqueued: true,
+        summary: null,
+        record_id: null,
+      })
+
+      const {findByTestId} = setup()
+
+      const el = await findByTestId('thread-summary-generating')
+      expect(el).toHaveAttribute('role', 'status')
+      expect(el).toHaveAttribute('aria-live', 'polite')
+    })
+  })
+
   it('shows inline quota-exhausted message instead of a toast', async () => {
     mockThreadSummary({
       status: 'current',
