@@ -182,9 +182,9 @@ export const ThreadSummaryBlock = () => {
         )
       case 'unavailable':
         return (
-          <Text data-testid="thread-summary-unavailable">
-            {I18n.t('Summary temporarily unavailable.')}
-          </Text>
+          <div role="status" aria-live="polite" data-testid="thread-summary-unavailable">
+            <Text>{I18n.t('Summary temporarily unavailable.')}</Text>
+          </div>
         )
       default:
         return null

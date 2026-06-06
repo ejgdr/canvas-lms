@@ -28,9 +28,10 @@
 # call in before) to eliminate that one-time cold-cache noise without warming the
 # topics under test. The measured assertion is exact equality — not <=.
 #
-# Verified: temporarily injecting `fresh_topic.discussion_entries.to_a` inside
-# the measured block (forcing per-row AR loads) causes the 10-entry count to
-# exceed the 1-entry count by 9, failing the spec.
+# Verified: temporarily injecting a per-row load
+# (`t.discussion_entries.map { |e| e.user&.name }`) inside the measured block
+# caused queries_10 to jump from 13 to 22 while queries_1 moved from 13 to 14
+# (difference of 9 = N-1 extra hits), failing the equality assertion.
 describe DiscussionThreadSummarizer::SummarizationService do
   def count_queries
     count = 0

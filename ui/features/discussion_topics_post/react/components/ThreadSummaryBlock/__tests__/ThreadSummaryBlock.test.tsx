@@ -441,7 +441,7 @@ describe('ThreadSummaryBlock', () => {
       expect(generating.textContent).toContain('Generating thread summary')
     })
 
-    it('unavailable state renders a text label (not silent empty block)', async () => {
+    it('unavailable state renders a text label with role=status and aria-live=polite', async () => {
       mockThreadSummary({
         status: 'unavailable',
         enabled: true,
@@ -454,6 +454,9 @@ describe('ThreadSummaryBlock', () => {
 
       const el = await findByTestId('thread-summary-unavailable')
       expect(el.textContent).toContain('unavailable')
+      // Must be a live region so transitions from generating → unavailable are announced
+      expect(el).toHaveAttribute('role', 'status')
+      expect(el).toHaveAttribute('aria-live', 'polite')
     })
 
     it('rate_limited_empty state renders a visible text label', async () => {
