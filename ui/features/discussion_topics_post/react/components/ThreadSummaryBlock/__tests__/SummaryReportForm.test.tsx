@@ -136,6 +136,28 @@ describe('SummaryReportForm', () => {
     expect(await findByTestId('thread-summary-report-confirmation')).toBeInTheDocument()
   })
 
+  // #46 a11y assertion — would fail if aria-live container is removed from confirmation
+  it('report confirmation container has aria-live=polite for screen reader announcement', async () => {
+    server.use(
+      http.post(reportPath, () =>
+        HttpResponse.json({id: 1, reason: 'other', reporter_role: 'student'}, {status: 201}),
+      ),
+    )
+
+    const user = userEvent.setup()
+    const {getByTestId, findByTestId} = setup()
+
+    await user.click(getByTestId('thread-summary-report-button'))
+    await user.click(await findByTestId('thread-summary-report-reason-other'))
+    await user.click(getByTestId('thread-summary-report-submit'))
+
+    const confirmation = await findByTestId('thread-summary-report-confirmation')
+    const liveContainer = confirmation.closest('[aria-live]')
+    expect(liveContainer).not.toBeNull()
+    expect(liveContainer).toHaveAttribute('aria-live', 'polite')
+    expect(liveContainer).toHaveAttribute('aria-atomic', 'true')
+  })
+
   it('closes the modal on Escape key', async () => {
     const user = userEvent.setup()
     const {getByTestId, findByRole, queryByRole} = setup()

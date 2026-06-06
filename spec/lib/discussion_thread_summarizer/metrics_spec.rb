@@ -163,4 +163,27 @@ describe DiscussionThreadSummarizer::Metrics do
       )
     end
   end
+
+  # #50 circuit-breaker panel metrics — frozen names (Cycle 36 M8 #48).
+  # These two are transition *counters* (not a state gauge). The Datadog panel
+  # graphs open/close events over time, not instantaneous circuit state.
+  describe ".increment_circuit_open" do
+    it "emits discussion_thread_summarizer.circuit_open with account_id and scope_mode tags" do
+      described_class.increment_circuit_open(account:, scope_mode: "default")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.circuit_open",
+        tags: { account_id: 10_000_000_000_001, scope_mode: "default" }
+      )
+    end
+  end
+
+  describe ".increment_circuit_closed" do
+    it "emits discussion_thread_summarizer.circuit_closed with account_id and scope_mode tags" do
+      described_class.increment_circuit_closed(account:, scope_mode: "limited")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
+        "discussion_thread_summarizer.circuit_closed",
+        tags: { account_id: 10_000_000_000_001, scope_mode: "limited" }
+      )
+    end
+  end
 end

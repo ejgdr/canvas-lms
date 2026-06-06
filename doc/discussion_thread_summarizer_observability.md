@@ -16,6 +16,29 @@ sum:discussion_thread_summarizer.generation_attempt{*} by {account_id, scope_mod
 No PII is present — `account_id` is the numeric global ID, not an institution name or user
 identifier. Data latency is within the existing InstStatsd/Datadog SLA (typically ≤1 minute).
 
+## Circuit-breaker events (M8 #48 — transition counters, not state gauge)
+
+Two counters track circuit-breaker state transitions (opened/closed) per account:
+
+- `discussion_thread_summarizer.circuit_open` — incremented each time the circuit opens
+  (N consecutive `TransportError` failures reached the threshold).
+  Tags: `account_id`, `scope_mode`.
+- `discussion_thread_summarizer.circuit_closed` — incremented each time an open circuit
+  closes (a successful half-open probe).
+  Tags: `account_id`, `scope_mode`.
+
+**These are transition counters, not a current-state gauge.** There is no
+`circuit_state` metric. Build the Datadog panel as open/close events over time
+(per account and scope_mode), not as an instantaneous state indicator.
+
+```
+sum:discussion_thread_summarizer.circuit_open{*} by {account_id,scope_mode}.as_count()
+sum:discussion_thread_summarizer.circuit_closed{*} by {account_id,scope_mode}.as_count()
+```
+
+See `doc/discussion_thread_summarizer_rollout.md` for the full dashboard panel set and
+the controlled rollout playbook.
+
 ## Generation latency (M4)
 
 When the `discussion_thread_summarizer` course feature is enabled, completed background generations emit InstStatsd timing on `discussion_thread_summarizer.generation_latency_ms` (tags: `account_id`, `scope_mode`). Attempts and failures increment `discussion_thread_summarizer.generation_attempt` and `discussion_thread_summarizer.generation_error` respectively. Latency measures wall-clock from `@client.summarize` through schema validation only — not cache lookup or rate-limiter probes. Cache hits and rate-limiter short-circuits do not emit generation metrics.

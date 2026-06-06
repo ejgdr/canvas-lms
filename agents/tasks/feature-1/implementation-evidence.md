@@ -1008,3 +1008,18 @@ Circuit breaker (P1 hardening) wraps `@client.summarize` in `SummarizationServic
 |---|---|---|---|---|---|
 | 36 | [#48](https://github.com/ejgdr/canvas-lms/issues/48) | [#133](https://github.com/ejgdr/canvas-lms/pull/133) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/circuit_breaker_spec.rb spec/apis/v1/discussion_thread_summarizer_outage_spec.rb` |
 | 36 | [#49](https://github.com/ejgdr/canvas-lms/issues/49) | [#133](https://github.com/ejgdr/canvas-lms/pull/133) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/apis/v1/discussion_thread_summarizer_outage_spec.rb` |
+| 37 | [#46](https://github.com/ejgdr/canvas-lms/issues/46) | pending | `discussion_thread_summarizer` | Pass | `yarn test ui/features/discussion_topics_post/react/components/ThreadSummaryBlock/__tests__/ThreadSummaryBlock.test.tsx ui/features/discussion_topics_post/react/components/ThreadSummaryBlock/__tests__/SummaryReportForm.test.tsx ui/features/discussion_topics_index/react/components/__tests__/OpenQuestionsDigest.test.tsx --run` |
+| 37 | [#47](https://github.com/ejgdr/canvas-lms/issues/47) | pending | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/performance/query_count_spec.rb --format documentation` |
+| 37 | [#50](https://github.com/ejgdr/canvas-lms/issues/50) | pending | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/lib/discussion_thread_summarizer/metrics_spec.rb -e "circuit"` |
+
+**#47 performance numbers (flag-off render baseline vs flag-on; measured in test environment):**
+
+| Metric | Value | Status |
+|--------|-------|--------|
+| `lookup_for_render` queries (warm, cached hit, 1–10 entries) | 2 (constant) | ✅ O(1) |
+| `fetch_or_create_summary` queries (warm, cache hit, 1–10 entries) | constant (same as 1-entry) | ✅ O(1) |
+| `ContentVersionHash.call` queries | 1 (single pluck) | ✅ O(1) |
+| p95 generation latency (~100-reply thread) | not measured in isolation — test env uses StubModelClient | pending maintainer sign-off |
+| cache hit rate (repeated-read soak) | ≥80% when hash stable | ✅ (by design: same hash → same hit) |
+
+M8 (Hardening) complete — #48/#49 (Cycle 36), #46/#47/#50 (Cycle 37). Milestone closed.

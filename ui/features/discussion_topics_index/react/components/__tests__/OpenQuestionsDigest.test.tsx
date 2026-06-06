@@ -185,6 +185,40 @@ describe('OpenQuestionsDigest', () => {
     })
   })
 
+  // #46 a11y assertions
+  describe('accessibility (WCAG 2.1 AA)', () => {
+    beforeEach(() => {
+      server.use(http.get(openQuestionsPath, () => HttpResponse.json(sampleQuestions)))
+    })
+
+    it('dismiss button is keyboard-operable (receives focus and activates on Enter)', async () => {
+      server.use(http.post(dismissPath(1), () => new Response(null, {status: 204})))
+      const user = userEvent.setup()
+      const {findByTestId, queryByTestId} = setup()
+
+      const btn = await findByTestId('open-question-dismiss-1')
+      btn.focus()
+      expect(btn).toHaveFocus()
+
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => {
+        expect(queryByTestId('open-question-row-1')).toBeNull()
+      })
+    })
+
+    it('live region for dismiss confirmation has aria-live=polite and aria-atomic=true', async () => {
+      const {findByTestId} = setup()
+      // List renders — live region must already be in the DOM
+      await findByTestId('open-questions-list')
+
+      const liveRegion = document.querySelector('[data-testid="open-questions-live-region"]')
+      expect(liveRegion).not.toBeNull()
+      expect(liveRegion).toHaveAttribute('aria-live', 'polite')
+      expect(liveRegion).toHaveAttribute('aria-atomic', 'true')
+    })
+  })
+
   describe('dismiss action (#32)', () => {
     beforeEach(() => {
       server.use(http.get(openQuestionsPath, () => HttpResponse.json(sampleQuestions)))

@@ -180,6 +180,12 @@ export const ThreadSummaryBlock = () => {
             {renderDisclosure()}
           </>
         )
+      case 'unavailable':
+        return (
+          <Text data-testid="thread-summary-unavailable">
+            {I18n.t('Summary temporarily unavailable.')}
+          </Text>
+        )
       default:
         return null
     }
