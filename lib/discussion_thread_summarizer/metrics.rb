@@ -211,5 +211,23 @@ module DiscussionThreadSummarizer
         tags: { reason:, reporter_role:, account_id: account.global_id }
       )
     end
+
+    # Emitted when the circuit breaker transitions to the open state (M8 #48).
+    # Frozen name — Cycle 37 #50 dashboard depends on it.
+    def self.increment_circuit_open(account:, scope_mode:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.circuit_open",
+        tags: { account_id: account.global_id, scope_mode: }
+      )
+    end
+
+    # Emitted when the circuit breaker transitions from open → closed (M8 #48).
+    # Frozen name — Cycle 37 #50 dashboard depends on it.
+    def self.increment_circuit_closed(account:, scope_mode:)
+      InstStatsd::Statsd.distributed_increment(
+        "#{PREFIX}.circuit_closed",
+        tags: { account_id: account.global_id, scope_mode: }
+      )
+    end
   end
 end

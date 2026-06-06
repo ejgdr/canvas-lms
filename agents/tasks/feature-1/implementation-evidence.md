@@ -999,3 +999,12 @@ Report storage against a specific summary version. `DiscussionTopicSummaryReport
 | 35 | integration | [#132](https://github.com/ejgdr/canvas-lms/pull/132) | `discussion_thread_summarizer` | Pass | `docker compose run --rm web bundle exec rspec spec/apis/v1/discussion_thread_summary_report_spec.rb --format documentation` |
 
 M7 (Quality feedback loop) complete — #41/#44/#45 (Cycle 34), #42/#43 + integration gate (this cycle). Milestone closed.
+
+## M8
+
+Circuit breaker (P1 hardening) wraps `@client.summarize` in `SummarizationService`. Three-key Redis state machine per account global_id: `open_key` (no TTL, deleted on close), `cooldown_key` (TTL = cooldown, expires to signal half-open), `probe_key` (SET nx — admits exactly one concurrent probe). Opens after N consecutive `TransportError` raises (Setting `discussion_thread_summarizer_circuit_failure_threshold`, default 5); half-open when `cooldown_key` expires. `state()` is a pure read (:closed/:open/:half_open — no writes). Probe acquired only by `try_acquire_probe()`, called exclusively from `fetch_or_create_summary` (the generation path). `lookup_for_render` treats `:half_open` like `:closed` (never consumes the probe) so the enqueued job can acquire it and close the circuit. `open!()` resets the failure counter for clean re-open cycles. Half-open recovery tested end-to-end: N failures → cooldown elapses → generation probe succeeds → `circuit_closed` emits → state `:closed`. Outage spec also asserts render-does-not-consume-probe, single-probe exclusivity (concurrent loser → `:unavailable`, zero client calls), and failed-probe re-opens: `record_failure` is state-aware — open/half-open path calls `open!()` immediately (no threshold wait); closed path counts to threshold as before.
+
+| Cycle | Issue | PR | Flag | QA | Reproduce |
+|---|---|---|---|---|---|
+| 36 | [#48](https://github.com/ejgdr/canvas-lms/issues/48) | [#133](https://github.com/ejgdr/canvas-lms/pull/133) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/services/discussion_thread_summarizer/circuit_breaker_spec.rb spec/apis/v1/discussion_thread_summarizer_outage_spec.rb` |
+| 36 | [#49](https://github.com/ejgdr/canvas-lms/issues/49) | [#133](https://github.com/ejgdr/canvas-lms/pull/133) | `discussion_thread_summarizer` | Pass | `docker compose exec web bundle exec rspec spec/apis/v1/discussion_thread_summarizer_outage_spec.rb` |
