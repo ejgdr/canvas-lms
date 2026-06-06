@@ -222,6 +222,92 @@ RSpec.describe "Discussion thread summarizer outage path (M8 gate, #49)", type: 
       "model client must not be called when serving a cached row (got #{client_calls} call(s))"
   end
 
+  # ── Half-open recovery ───────────────────────────────────────────────────────
+  # Drives N real failures, lets the cooldown elapse, then verifies the recovery
+  # path: probe acquired by generation → client called → circuit closed.
+  # Also verifies: render does not consume the probe; exactly one generation
+  # attempt reaches the client per half-open window.
+  context "half-open recovery" do
+    let(:account) { @course.root_account }
+
+    before do
+      # 1-second cooldown so the half-open window is reachable without a long sleep.
+      # Pass-through for all other Setting.get calls so the job infrastructure works.
+      allow(Setting).to receive(:get).and_call_original
+      allow(Setting).to receive(:get)
+        .with(DiscussionThreadSummarizer::CircuitBreaker::COOLDOWN_SETTING_KEY, anything)
+        .and_return("1")
+
+      threshold = DiscussionThreadSummarizer::CircuitBreaker::DEFAULT_FAILURE_THRESHOLD.to_i
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_open)
+      allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize)
+        .and_raise(DiscussionThreadSummarizer::TransportError, "service down")
+      threshold.times { drive_one_failure }
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_circuit_open).at_least(:once)
+
+      # Wait for the 1-second Redis TTL on cooldown_key to expire.
+      sleep(1.5)
+      expect(DiscussionThreadSummarizer::CircuitBreaker.state(account:)).to eq(:half_open)
+    end
+
+    it "closes the circuit and emits circuit_closed after a successful probe" do
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_closed)
+      allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize)
+        .and_return(DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE)
+
+      DiscussionThreadSummarizer::SummarizationService.enqueue_for(
+        discussion_topic: @topic,
+        viewer: @teacher
+      )
+      run_jobs
+
+      expect(DiscussionThreadSummarizer::Metrics).to have_received(:increment_circuit_closed)
+        .with(account:, scope_mode: anything)
+      expect(DiscussionThreadSummarizer::CircuitBreaker.state(account:)).to eq(:closed)
+      expect(@topic.summaries.reload.count).to be >= 1
+    end
+
+    it "render does not consume the probe; the subsequent generation job still reaches the client" do
+      client_calls = 0
+      allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_circuit_closed)
+      allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize) do
+        client_calls += 1
+        DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE
+      end
+
+      # Render must not consume the probe.
+      api_call(:get, render_path, render_params)
+      expect(response).to have_http_status(:ok)
+      expect(DiscussionThreadSummarizer::CircuitBreaker.state(account:)).to eq(:half_open),
+        "render must not consume the probe — circuit must remain half-open"
+
+      # Generation job (enqueued by render) acquires the probe and reaches the client.
+      run_jobs
+      expect(client_calls).to eq(1),
+        "generation job must reach the client (probe not consumed by render)"
+      expect(DiscussionThreadSummarizer::CircuitBreaker.state(account:)).to eq(:closed)
+    end
+
+    it "only one generation attempt per window reaches the client; loser returns :unavailable" do
+      # Hold the probe, simulating a concurrent winner that beat us to it.
+      expect(DiscussionThreadSummarizer::CircuitBreaker.try_acquire_probe(account:)).to be(true)
+
+      client_calls = 0
+      allow_any_instance_of(DiscussionThreadSummarizer::StubModelClient).to receive(:summarize) do
+        client_calls += 1
+        DiscussionThreadSummarizer::StubModelClient::FIXED_RESPONSE
+      end
+
+      # Second attempt (probe already held) must short-circuit without calling the client.
+      result = DiscussionThreadSummarizer::SummarizationService.new.fetch_or_create_summary(
+        discussion_topic: @topic,
+        viewer: @teacher
+      )
+      expect(result.status).to eq(:unavailable)
+      expect(client_calls).to eq(0), "loser must not call the client — probe already held"
+    end
+  end
+
   # ── Example 4: no error envelope (inline unavailable status only) ─────────
   it "unavailable state carries no error envelope — inline status field only" do
     threshold = DiscussionThreadSummarizer::CircuitBreaker::DEFAULT_FAILURE_THRESHOLD.to_i

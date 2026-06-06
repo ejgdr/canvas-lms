@@ -50,28 +50,32 @@ describe DiscussionThreadSummarizer::CircuitBreaker do
         allow(fake_redis).to receive(:get).and_return("1", nil)
       end
 
-      it "returns :closed (probe granted) when probe_key can be acquired" do
-        allow(fake_redis).to receive(:set).with(anything, 1, nx: true, ex: anything).and_return(true)
-        expect(described_class.state(account:)).to eq(:closed)
+      it "returns :half_open (pure read — no probe write)" do
+        expect(described_class.state(account:)).to eq(:half_open)
       end
+    end
+  end
 
-      it "returns :open (probe in flight) when probe_key is already held" do
-        allow(fake_redis).to receive(:set).with(anything, 1, nx: true, ex: anything).and_return(false)
-        expect(described_class.state(account:)).to eq(:open)
-      end
+  # ── .try_acquire_probe ──────────────────────────────────────────────────────
 
-      it "admits exactly one probe per cooldown window" do
-        # First caller acquires probe; second is blocked.
-        allow(fake_redis).to receive(:set)
-          .with(anything, 1, nx: true, ex: anything)
-          .and_return(true, false)
+  describe ".try_acquire_probe" do
+    it "returns true when probe_key is acquired" do
+      allow(fake_redis).to receive(:set).with(anything, 1, nx: true, ex: anything).and_return(true)
+      expect(described_class.try_acquire_probe(account:)).to be(true)
+    end
 
-        # Simulate two concurrent .state calls (same redis state each time).
-        allow(fake_redis).to receive(:get).and_return("1", nil, "1", nil)
+    it "returns false when probe_key is already held" do
+      allow(fake_redis).to receive(:set).with(anything, 1, nx: true, ex: anything).and_return(false)
+      expect(described_class.try_acquire_probe(account:)).to be(false)
+    end
 
-        expect(described_class.state(account:)).to eq(:closed)  # probe granted
-        expect(described_class.state(account:)).to eq(:open)    # probe in flight
-      end
+    it "admits exactly one probe per cooldown window" do
+      allow(fake_redis).to receive(:set)
+        .with(anything, 1, nx: true, ex: anything)
+        .and_return(true, false)
+
+      expect(described_class.try_acquire_probe(account:)).to be(true)   # winner
+      expect(described_class.try_acquire_probe(account:)).to be(false)  # loser
     end
   end
 
@@ -116,6 +120,16 @@ describe DiscussionThreadSummarizer::CircuitBreaker do
         account:,
         scope_mode:
       )
+    end
+
+    it "resets the failure counter when opening so the next cycle starts at 1" do
+      threshold = Setting.get(
+        described_class::FAILURE_THRESHOLD_SETTING_KEY,
+        described_class::DEFAULT_FAILURE_THRESHOLD
+      ).to_i
+      allow(fake_redis).to receive(:incr).and_return(threshold)
+      described_class.record_failure(account:, scope_mode:)
+      expect(fake_redis).to have_received(:del).with(a_string_including("failures"))
     end
   end
 

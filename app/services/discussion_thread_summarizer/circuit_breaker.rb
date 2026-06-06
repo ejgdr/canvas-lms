@@ -27,19 +27,22 @@ module DiscussionThreadSummarizer
   #   open_key     — present while circuit is open (no TTL; deleted on close).
   #   cooldown_key — present during the cooldown window after opening (TTL =
   #                  cooldown_seconds). When it expires, the circuit is half-open.
-  #   probe_key    — acquired (nx: true) by exactly one caller in the half-open
-  #                  window; prevents concurrent probes from flooding the service.
+  #   probe_key    — acquired (nx: true) by exactly one generation attempt in the
+  #                  half-open window; prevents concurrent probes from flooding the
+  #                  service. Render calls never touch this key.
   #
   # States:
   #   closed    — open_key absent.  All calls allowed.
   #   open      — open_key present AND cooldown_key present.  All calls blocked.
   #   half-open — open_key present, cooldown_key absent (expired).  Exactly ONE
-  #               caller acquires probe_key (nx) and is let through as a trial.
-  #               All other concurrent callers see :open until the trial resolves.
+  #               generation attempt acquires probe_key (nx) and is let through as
+  #               a trial. All other concurrent attempts short-circuit to
+  #               :unavailable until the trial resolves.
   #               Success → closed (record_success).
   #               Failure → re-open with a fresh cooldown (record_failure → open!).
   #
-  # .state(account:)             → :open | :closed
+  # .state(account:)             → :open | :half_open | :closed  (pure read, no writes)
+  # .try_acquire_probe(account:) → true for the one winner, false for all others.
   # .record_success(account:, …) — resets counter, closes circuit, emits metric.
   # .record_failure(account:, …) — increments counter; opens when threshold hit.
   class CircuitBreaker
@@ -48,6 +51,7 @@ module DiscussionThreadSummarizer
     COOLDOWN_SETTING_KEY          = "discussion_thread_summarizer_circuit_cooldown_seconds"
     DEFAULT_COOLDOWN_SECONDS      = "30"
 
+    # Pure state read — no writes. Returns :closed, :open, or :half_open.
     def self.state(account:)
       raise DiscussionThreadSummarizer::RegenerationRateLimiter::REDIS_REQUIRED_MESSAGE \
         unless Canvas.redis_enabled?
@@ -57,8 +61,18 @@ module DiscussionThreadSummarizer
       # Circuit is open. Still within the cooldown window?
       return :open if Canvas.redis.get(cooldown_key(account)).present?
 
-      # Cooldown elapsed — half-open. Grant exactly one probe per window.
-      Canvas.redis.set(probe_key(account), 1, nx: true, ex: cooldown_seconds) ? :closed : :open
+      # Cooldown elapsed — half-open window.
+      :half_open
+    end
+
+    # Attempts to acquire the single trial probe in a half-open window.
+    # Returns true for exactly one winner; false for all concurrent losers.
+    # Called only from the generation path, never from render.
+    def self.try_acquire_probe(account:)
+      raise DiscussionThreadSummarizer::RegenerationRateLimiter::REDIS_REQUIRED_MESSAGE \
+        unless Canvas.redis_enabled?
+
+      !!Canvas.redis.set(probe_key(account), 1, nx: true, ex: cooldown_seconds)
     end
 
     def self.record_failure(account:, scope_mode:)
@@ -91,6 +105,7 @@ module DiscussionThreadSummarizer
       Canvas.redis.set(open_key(account), 1)              # no TTL — survives until record_success
       Canvas.redis.set(cooldown_key(account), 1, ex: cx)  # expires to signal half-open window
       Canvas.redis.del(probe_key(account))                 # clear stale probe from prior cycle
+      Canvas.redis.del(failure_key(account))               # reset counter so next cycle starts at 1
       DiscussionThreadSummarizer::Metrics.increment_circuit_open(account:, scope_mode:)
     end
     private_class_method :open!

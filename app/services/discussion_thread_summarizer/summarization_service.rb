@@ -93,11 +93,18 @@ module DiscussionThreadSummarizer
 
       DiscussionThreadSummarizer::Metrics.increment_cache_miss(account:)
 
-      # Circuit check before rate-limiter: an open circuit means no generation will
+      # Circuit check before rate-limiter: a blocked circuit means no generation will
       # happen, so do not burn the user's cooldown/quota budget for a no-op attempt.
       # Cache hits bypass both the circuit and the limiter (no model call either way).
-      if Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
-        return CacheResult.new(status: :unavailable, record: nil, result: nil)
+      # In half-open, exactly one generation attempt acquires the probe; losers return
+      # :unavailable without calling the client or consuming rate-limit budget.
+      if Canvas.redis_enabled?
+        circuit_state = CircuitBreaker.state(account:)
+        if circuit_state == :open
+          return CacheResult.new(status: :unavailable, record: nil, result: nil)
+        elsif circuit_state == :half_open && !CircuitBreaker.try_acquire_probe(account:)
+          return CacheResult.new(status: :unavailable, record: nil, result: nil)
+        end
       end
 
       # NOTE: The rekey path in DiscussionThreadSummarizer::CacheInvalidation does NOT
@@ -178,7 +185,9 @@ module DiscussionThreadSummarizer
 
       # Evaluate circuit state once and reuse below. The breaker short-circuits
       # *generation* only — cached reads are always served regardless of state.
-      circuit_open = Canvas.redis_enabled? && CircuitBreaker.state(account:) == :open
+      # In :half_open, render does not consume the probe so the generation job can.
+      circuit_state = Canvas.redis_enabled? ? CircuitBreaker.state(account:) : :closed
+      circuit_open  = circuit_state == :open
 
       record       = find_latest_summary_row(discussion_topic, locale)
       current_hash = ContentVersionHash.call(discussion_topic, scope_mode:, viewer:)
