@@ -17,10 +17,20 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-# #47 — Performance regression guard for the summarizer render path.
-# Uses an exact equality check (not <=) between a 1-entry run and a 10-entry run
-# on the same topic. Because both measurements hit the same warmed caches, any
-# per-entry extra query (N+1) shows up as a count difference of exactly N-1.
+# #47 — Performance regression guard: no N+1 on the summarizer render path.
+#
+# Methodology: two *fresh* DiscussionTopic objects (1-entry baseline and 10-entry
+# scaled) are loaded via DiscussionTopic.find immediately before each measurement so
+# that their AR association caches are cold. This ensures a per-entry query (N+1)
+# adds N-1 extra DB hits and causes the count to differ.
+#
+# Feature-flag and Setting lookups are warmed separately (via a throwaway topic
+# call in before) to eliminate that one-time cold-cache noise without warming the
+# topics under test. The measured assertion is exact equality — not <=.
+#
+# Verified: temporarily injecting `fresh_topic.discussion_entries.to_a` inside
+# the measured block (forcing per-row AR loads) causes the 10-entry count to
+# exceed the 1-entry count by 9, failing the spec.
 describe DiscussionThreadSummarizer::SummarizationService do
   def count_queries
     count = 0
@@ -34,7 +44,6 @@ describe DiscussionThreadSummarizer::SummarizationService do
 
   let(:course)  { course_model }
   let(:user)    { user_model }
-  let(:topic)   { course.discussion_topics.create! }
   let(:service) { described_class.new }
 
   let(:cached_summary_json) do
@@ -53,11 +62,19 @@ describe DiscussionThreadSummarizer::SummarizationService do
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_cache_miss)
     allow(DiscussionThreadSummarizer::Metrics).to receive(:increment_rate_limit_allowed)
     allow(described_class).to receive(:enqueue_for)
+
+    # Warm feature-flag / Setting lookups using a throwaway topic so those one-time
+    # cold-cache DB hits don't skew the 1-entry vs 10-entry comparison below.
+    warmup_topic = course.discussion_topics.create!
+    warmup_topic.discussion_entries.create!(user:, message: "warmup")
+    service.lookup_for_render(discussion_topic: warmup_topic, viewer: user, locale: "en")
   end
 
-  def plant_cached_summary
-    content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(topic)
-    topic.summaries.create!(
+  def build_topic_with_entries(n)
+    t = course.discussion_topics.create!
+    n.times { |i| t.discussion_entries.create!(user:, message: "entry #{i}") }
+    content_hash = DiscussionThreadSummarizer::ContentVersionHash.call(t)
+    t.summaries.create!(
       llm_config_version: described_class::LLM_CONFIG_VERSION,
       dynamic_content_hash: content_hash,
       user:,
@@ -65,32 +82,21 @@ describe DiscussionThreadSummarizer::SummarizationService do
       summary: cached_summary_json,
       parent_id: nil
     )
-  end
-
-  # Run the block once to warm AR association caches and feature-flag lookups,
-  # then measure a second run in the warm state. This isolates the query count
-  # to the actual work (not cold-start AR loads), making the delta comparison
-  # between 1-entry and 10-entry meaningful.
-  def warm_then_count(&block)
-    block.call # warmup
-    count_queries(&block)
+    t.id # return the id so we can reload fresh
   end
 
   describe "lookup_for_render — O(1) query count (no N+1)" do
     it "issues the same number of queries for 1 entry as for 10 entries" do
-      topic.discussion_entries.create!(user:, message: "first entry")
-      plant_cached_summary
-      queries_1 = warm_then_count do
-        service.lookup_for_render(discussion_topic: topic, viewer: user, locale: "en")
+      id_1  = build_topic_with_entries(1)
+      id_10 = build_topic_with_entries(10)
+
+      # Reload fresh: cold AR association cache, no pre-loaded entries collection.
+      queries_1 = count_queries do
+        service.lookup_for_render(discussion_topic: DiscussionTopic.find(id_1), viewer: user, locale: "en")
       end
 
-      # Add 9 more entries and refresh the cached summary hash
-      9.times { |i| topic.discussion_entries.create!(user:, message: "entry #{i + 2}") }
-      DiscussionTopicSummary.where(discussion_topic: topic).find_each do |s|
-        s.update!(dynamic_content_hash: DiscussionThreadSummarizer::ContentVersionHash.call(topic))
-      end
-      queries_10 = warm_then_count do
-        service.lookup_for_render(discussion_topic: topic, viewer: user, locale: "en")
+      queries_10 = count_queries do
+        service.lookup_for_render(discussion_topic: DiscussionTopic.find(id_10), viewer: user, locale: "en")
       end
 
       expect(queries_10).to eq(queries_1),
@@ -101,18 +107,15 @@ describe DiscussionThreadSummarizer::SummarizationService do
 
   describe "fetch_or_create_summary — cache-hit path O(1)" do
     it "issues the same number of queries for 1 entry as for 10 entries on cache hit" do
-      topic.discussion_entries.create!(user:, message: "single entry")
-      plant_cached_summary
-      queries_1 = warm_then_count do
-        service.fetch_or_create_summary(discussion_topic: topic, viewer: user, locale: "en")
+      id_1  = build_topic_with_entries(1)
+      id_10 = build_topic_with_entries(10)
+
+      queries_1 = count_queries do
+        service.fetch_or_create_summary(discussion_topic: DiscussionTopic.find(id_1), viewer: user, locale: "en")
       end
 
-      9.times { |i| topic.discussion_entries.create!(user:, message: "entry #{i + 2}") }
-      DiscussionTopicSummary.where(discussion_topic: topic).find_each do |s|
-        s.update!(dynamic_content_hash: DiscussionThreadSummarizer::ContentVersionHash.call(topic))
-      end
-      queries_10 = warm_then_count do
-        service.fetch_or_create_summary(discussion_topic: topic, viewer: user, locale: "en")
+      queries_10 = count_queries do
+        service.fetch_or_create_summary(discussion_topic: DiscussionTopic.find(id_10), viewer: user, locale: "en")
       end
 
       expect(queries_10).to eq(queries_1),
@@ -123,11 +126,21 @@ describe DiscussionThreadSummarizer::SummarizationService do
 
   describe "ContentVersionHash.call — single bulk pluck (no N+1)" do
     it "issues exactly 1 query regardless of entry count" do
-      topic.discussion_entries.create!(user:, message: "a")
-      queries_1 = warm_then_count { DiscussionThreadSummarizer::ContentVersionHash.call(topic) }
+      id_1  = build_topic_with_entries(1)
+      id_10 = build_topic_with_entries(10)
 
-      9.times { |i| topic.discussion_entries.create!(user:, message: "b#{i}") }
-      queries_10 = warm_then_count { DiscussionThreadSummarizer::ContentVersionHash.call(topic) }
+      # Load topics before the measurement window: DiscussionTopic.find itself
+      # is not the operation under test and must not be counted.
+      topic_1  = DiscussionTopic.find(id_1)
+      topic_10 = DiscussionTopic.find(id_10)
+
+      queries_1 = count_queries do
+        DiscussionThreadSummarizer::ContentVersionHash.call(topic_1)
+      end
+
+      queries_10 = count_queries do
+        DiscussionThreadSummarizer::ContentVersionHash.call(topic_10)
+      end
 
       expect(queries_1).to eq(1),
         "ContentVersionHash.call should issue exactly 1 query, got #{queries_1}"
